@@ -25,10 +25,12 @@ impl Ord for Event { fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.ti
 
 pub struct ScheduleCmd { pub delay: u64, pub node_id: NodeId, pub event_type: EventType }
 
-pub trait SystemInspector { fn record_metric(&self, name: &str, value: f64); }
+pub trait SystemInspector {
+    fn is_node_healthy(&self, id: NodeId) -> bool;
+}
 
 pub struct Simulation {
-    pub time: u64,
+    pub time: u64, // Microseconds
     pub components: HashMap<NodeId, Box<dyn Component>>,
     pub events: BinaryHeap<Reverse<Event>>,
     pub success_count: u64,
@@ -42,6 +44,14 @@ impl Simulation {
     }
 
     pub fn add_component(&mut self, id: NodeId, component: Box<dyn Component>) { self.components.insert(id, component); }
+    
+    pub fn remove_node(&mut self, id: NodeId) {
+        self.components.remove(&id);
+        for comp in self.components.values_mut() {
+            comp.remove_target(id);
+        }
+    }
+
     pub fn schedule(&mut self, time: u64, node_id: NodeId, event_type: EventType) {
         self.events.push(Reverse(Event { time, node_id, event_type }));
     }
@@ -51,26 +61,21 @@ impl Simulation {
             self.time = event.time;
             let node_id = event.node_id;
             
-            // --- Global Lifecycle Tracking ---
             match &event.event_type {
                 EventType::Response { success, start_time, timeout, .. } => {
-                    let total_time = self.time.saturating_sub(*start_time);
-                    
-                    // Unified Timeout Logic: If it took too long, it's a failure regardless of component status
-                    if total_time > *timeout {
-                        self.failure_count += 1;
-                    } else if *success {
-                        self.success_count += 1;
-                        self.latencies.push((self.time, total_time));
-                    } else {
-                        self.failure_count += 1;
-                    }
+                    let total_time_us = self.time.saturating_sub(*start_time);
+                    if total_time_us > *timeout { self.failure_count += 1; }
+                    else if *success { self.success_count += 1; self.latencies.push((self.time, total_time_us)); }
+                    else { self.failure_count += 1; }
                 }
                 _ => {}
             }
 
+            let mut health_map = HashMap::new();
+            for (id, comp) in &self.components { health_map.insert(*id, comp.is_healthy()); }
+
             if let Some(comp) = self.components.get_mut(&node_id) {
-                let cmds = comp.on_event(event, &SimpleInspector);
+                let cmds = comp.on_event(event, &StaticInspector { health_map });
                 for cmd in cmds {
                     self.schedule(self.time + cmd.delay, cmd.node_id, cmd.event_type);
                 }
@@ -81,8 +86,8 @@ impl Simulation {
     }
 
     pub fn reset_stats(&mut self) { self.success_count = 0; self.failure_count = 0; self.latencies.clear(); }
-    pub fn get_percentile(&self, p: f32, window_ms: u64) -> u64 {
-        let cutoff = self.time.saturating_sub(window_ms);
+    pub fn get_percentile(&self, p: f32, window_us: u64) -> u64 {
+        let cutoff = self.time.saturating_sub(window_us);
         let mut sample: Vec<u64> = self.latencies.iter().filter(|(t, _)| *t >= cutoff).map(|(_, l)| *l).collect();
         if sample.is_empty() { return 0; }
         sample.sort_unstable();
@@ -91,5 +96,7 @@ impl Simulation {
     }
 }
 
-struct SimpleInspector;
-impl SystemInspector for SimpleInspector { fn record_metric(&self, _name: &str, _value: f64) {} }
+struct StaticInspector { health_map: HashMap<NodeId, bool> }
+impl SystemInspector for StaticInspector {
+    fn is_node_healthy(&self, id: NodeId) -> bool { *self.health_map.get(&id).unwrap_or(&false) }
+}

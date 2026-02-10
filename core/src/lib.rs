@@ -9,6 +9,6 @@ pub use components::server::{Server, ServerConfig};
 pub use components::client::{Client, ClientConfig};
 pub use components::load_balancer::{LoadBalancer, LoadBalancerConfig};
 
-/// Global simulation "physics" constants
-pub const NETWORK_DELAY_MS: u64 = 10;
-pub const PROCESS_OVERHEAD_MS: u64 = 5;
+/// High-precision physics constants (in Microseconds)
+pub const NETWORK_DELAY_US: u64 = 10_000;    // 10ms
+pub const PROCESS_OVERHEAD_US: u64 = 2_000;  // 2ms

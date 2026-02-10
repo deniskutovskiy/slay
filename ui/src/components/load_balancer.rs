@@ -2,7 +2,6 @@ use eframe::egui;
 use serde_json::Value;
 use crate::components::ComponentView;
 
-#[derive(Default)]
 pub struct LoadBalancerView;
 
 impl ComponentView for LoadBalancerView {
@@ -14,7 +13,7 @@ impl ComponentView for LoadBalancerView {
         
         let center = rect.center();
 
-        // 1. Strategy Abbreviation - Back to short form
+        // 1. Strategy Name
         let strategy_name = match snapshot["strategy"].as_str().unwrap_or("RoundRobin") {
             "RoundRobin" => "RR",
             "Random" => "RND",
@@ -29,30 +28,32 @@ impl ComponentView for LoadBalancerView {
             painter.text(rect.right_top() + egui::vec2(-8.0 * zoom, 25.0 * zoom), egui::Align2::RIGHT_TOP, format!("{:.0} RPS", rps), f_s, egui::Color32::from_rgb(0, 255, 150));
         }
 
-        // 3. Distribution Visualization (Bottom)
-        if let Some(loads) = snapshot["loads"].as_object() {
-            let num_targets = loads.len();
+        // 3. Distribution Visualization (Using 'targets' as source of truth)
+        if let Some(targets) = snapshot["targets"].as_array() {
+            let num_targets = targets.len();
             if num_targets > 0 {
-                let bar_width = (140.0 / num_targets as f32).min(25.0) * zoom;
+                let bar_width = (140.0 / num_targets as f32).min(20.0) * zoom;
                 let spacing = 4.0 * zoom;
                 let total_width = (bar_width + spacing) * num_targets as f32 - spacing;
                 let start_x = rect.center().x - total_width / 2.0;
+                let baseline_y = rect.bottom() - 18.0 * zoom; 
                 
-                for (i, (target_id, load_val)) in loads.iter().enumerate() {
-                    let load = load_val.as_u64().unwrap_or(0);
+                let loads = snapshot["loads"].as_object();
+
+                for (i, target_id_val) in targets.iter().enumerate() {
+                    let target_id_str = target_id_val.as_u64().unwrap_or(0).to_string();
+                    let load = loads.and_then(|l| l.get(&target_id_str)).and_then(|v| v.as_u64()).unwrap_or(0);
+                    
                     let x = start_x + (i as f32 * (bar_width + spacing));
-                    let bar_rect = egui::Rect::from_min_size(
-                        egui::pos2(x, rect.bottom() - 12.0 * zoom),
-                        egui::vec2(bar_width, 4.0 * zoom)
-                    );
+                    let bar_rect = egui::Rect::from_min_size(egui::pos2(x, baseline_y), egui::vec2(bar_width, 4.0 * zoom));
                     
                     let col = if load > 0 { egui::Color32::from_rgb(136, 192, 208) } else { egui::Color32::from_gray(50) };
                     painter.rect_filled(bar_rect, 1.0 * zoom, col);
                     
                     if zoom > 0.8 {
-                        painter.text(egui::pos2(x + bar_width/2.0, rect.bottom() - 18.0 * zoom), egui::Align2::CENTER_BOTTOM, format!("#{}", target_id), f_xs.clone(), egui::Color32::from_gray(150));
+                        painter.text(egui::pos2(x + bar_width/2.0, baseline_y - 4.0 * zoom), egui::Align2::CENTER_BOTTOM, format!("#{}", target_id_str), f_xs.clone(), egui::Color32::from_gray(150));
                         if load > 0 {
-                            painter.text(egui::pos2(x + bar_width/2.0, rect.bottom() - 4.0 * zoom), egui::Align2::CENTER_TOP, format!("{}", load), f_xs.clone(), egui::Color32::GOLD);
+                            painter.text(egui::pos2(x + bar_width/2.0, baseline_y + 6.0 * zoom), egui::Align2::CENTER_TOP, format!("{}", load), f_xs.clone(), egui::Color32::GOLD);
                         }
                     }
                 }
@@ -66,6 +67,7 @@ impl ComponentView for LoadBalancerView {
         
         if let Some(strategy) = config.get_mut("strategy") {
             let mut current = strategy.as_str().unwrap_or("RoundRobin").to_string();
+            // Use 'id_salt' instead of deprecated 'id_source'
             egui::ComboBox::from_id_salt("lb_strategy")
                 .selected_text(&current)
                 .show_ui(ui, |ui| {
@@ -81,5 +83,11 @@ impl ComponentView for LoadBalancerView {
         ui.label("Load Balancer tracks active requests to each backend.");
         
         changed
+    }
+}
+
+impl Default for LoadBalancerView {
+    fn default() -> Self {
+        Self
     }
 }

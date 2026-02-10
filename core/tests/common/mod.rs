@@ -57,7 +57,9 @@ impl TestHarness {
     }
 
     pub fn run_for(&mut self, duration_ms: u64) {
-        let end_time = self.sim.time + duration_ms;
+        // CONVERT MS TO US
+        let duration_us = duration_ms * 1000;
+        let end_time = self.sim.time + duration_us;
         while self.sim.time < end_time {
             if !self.sim.step() {
                 if let Some(next_event) = self.sim.events.peek() {
@@ -80,6 +82,7 @@ impl TestHarness {
     }
 
     pub fn p99(&self) -> u64 {
-        self.sim.get_percentile(99.0, 5000)
+        // Return in ms for test assertions, but window is in US
+        self.sim.get_percentile(99.0, 5_000_000) / 1000
     }
 }

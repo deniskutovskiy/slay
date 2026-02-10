@@ -134,16 +134,23 @@ impl eframe::App for SlayApp {
         self.last_frame_time = current_real_time;
 
         if self.is_running {
-            let virtual_dt = (dt as f32 * self.sim_speed * 1000.0) as u64;
+            // High Precision: 1 sec real time = 1,000,000 us virtual time
+            let virtual_dt = (dt as f32 * self.sim_speed * 1_000_000.0) as u64;
             let target_virtual_time = self.simulation.time + virtual_dt;
+            
             let mut processed = 0;
+            let max_events_per_frame = 10000;
+            
             while let Some(event) = self.simulation.events.peek() {
-                if event.0.time <= target_virtual_time && processed < 5000 { 
+                if event.0.time <= target_virtual_time && processed < max_events_per_frame { 
                     self.simulation.step(); 
                     processed += 1;
                 } else { break; }
             }
-            self.simulation.time = target_virtual_time;
+            
+            if processed < max_events_per_frame {
+                self.simulation.time = target_virtual_time;
+            }
             ctx.request_repaint();
         }
 
@@ -168,19 +175,26 @@ impl eframe::App for SlayApp {
                 ui.separator();
                 ui.add_space(20.0);
                 ui.label(egui::RichText::new("PERFORMANCE").strong().size(10.0).color(COLOR_TEXT_DIM));
-                let w_ms = (self.stats_window_seconds * 1000.0) as u64;
-                let p99 = self.simulation.get_percentile(99.0, w_ms);
+                
+                // Convert us to ms for display
+                let w_us = (self.stats_window_seconds * 1_000_000.0) as u64;
+                let p99_ms = self.simulation.get_percentile(99.0, w_us) as f32 / 1000.0;
                 ui.label(egui::RichText::new("P99:").color(COLOR_ACCENT));
-                ui.label(egui::RichText::new(format!("{}ms", p99)).strong().color(COLOR_ACCENT));
+                ui.label(egui::RichText::new(format!("{:.1}ms", p99_ms)).strong().color(COLOR_ACCENT));
+                
                 ui.add_space(10.0);
                 ui.add(egui::Slider::new(&mut self.stats_window_seconds, 1.0..=60.0).suffix("s"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(format!("{:.1}s", self.simulation.time as f32 / 1000.0)).strong().color(COLOR_TEXT));
+                    // Clock in seconds
+                    ui.label(egui::RichText::new(format!("{:.1}s", self.simulation.time as f32 / 1_000_000.0)).strong().color(COLOR_TEXT));
                     ui.label(egui::RichText::new("CLOCK:").color(COLOR_TEXT));
                     ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(10.0);
-                    if ui.button("Reset Stats").clicked() { self.simulation.reset_stats(); }
+                    if ui.button("Reset Stats").clicked() { 
+                        self.simulation.reset_stats(); 
+                        for comp in self.simulation.components.values_mut() { comp.reset_internal_stats(); }
+                    }
                 });
             });
         });

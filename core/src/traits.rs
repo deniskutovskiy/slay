@@ -24,6 +24,7 @@ pub trait Component: Any {
     fn set_healthy(&mut self, healthy: bool);
     fn is_healthy(&self) -> bool;
     fn add_target(&mut self, target: NodeId);
+    fn remove_target(&mut self, target: NodeId);
     fn get_targets(&self) -> Vec<NodeId>;
     fn clear_targets(&mut self);
 

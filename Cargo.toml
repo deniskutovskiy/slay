@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "core",
+    "ui",
+]
+resolver = "2"
+
+[workspace.package]
+authors = ["Denis Kutovskiy <denis@example.com>"]
+edition = "2021"
+license = "MIT"
+description = "High-fidelity interactive system design simulator"
+repository = "https://github.com/deniskutovskiy/slay"
+homepage = "https://github.com/deniskutovskiy/slay"
+keywords = ["system-design", "simulator", "distributed-systems", "sre"]
+categories = ["development-tools::simulation", "education"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.8"
+egui = "0.30"
+eframe = "0.30"

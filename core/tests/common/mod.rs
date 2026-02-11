@@ -17,7 +17,9 @@ pub struct ServerHandle {
 
 impl TestHarness {
     pub fn new() -> Self {
-        Self { sim: Simulation::new() }
+        Self {
+            sim: Simulation::new(),
+        }
     }
 
     pub fn add(&mut self, id: NodeId, component: Box<dyn Component>) {
@@ -31,11 +33,21 @@ impl TestHarness {
         ClientHandle { _id: id, config }
     }
 
-    pub fn add_server(&mut self, id: NodeId, name: &str, service_time: u64, concurrency: u32, backlog: u32) -> ServerHandle {
+    pub fn add_server(
+        &mut self,
+        id: NodeId,
+        name: &str,
+        service_time: u64,
+        concurrency: u32,
+        backlog: u32,
+    ) -> ServerHandle {
         let server = Server::new(name, service_time, concurrency, backlog);
         let config = Arc::clone(&server.config);
         self.add(id, Box::new(server));
-        ServerHandle { _id: id, _config: config }
+        ServerHandle {
+            _id: id,
+            _config: config,
+        }
     }
 
     pub fn set_target(&mut self, from: NodeId, to: NodeId) {
@@ -50,14 +62,14 @@ impl TestHarness {
             if let Some(comp) = self.sim.components.get(&id) {
                 let cmds = comp.wake_up(id, self.sim.time);
                 for cmd in cmds {
-                    self.sim.schedule(self.sim.time + cmd.delay, cmd.node_id, cmd.event_type);
+                    self.sim
+                        .schedule(self.sim.time + cmd.delay, cmd.node_id, cmd.event_type);
                 }
             }
         }
     }
 
     pub fn run_for(&mut self, duration_ms: u64) {
-        // CONVERT MS TO US
         let duration_us = duration_ms * 1000;
         let end_time = self.sim.time + duration_us;
         while self.sim.time < end_time {
@@ -77,12 +89,13 @@ impl TestHarness {
 
     pub fn sla(&self) -> f32 {
         let total = self.sim.success_count + self.sim.failure_count;
-        if total == 0 { return 100.0; }
+        if total == 0 {
+            return 100.0;
+        }
         (self.sim.success_count as f32 / total as f32) * 100.0
     }
 
     pub fn p99(&self) -> u64 {
-        // Return in ms for test assertions, but window is in US
-        self.sim.get_percentile(99.0, 5_000_000) / 1000
+        self.sim.get_percentile(99.0, 5_000_000).unwrap_or(0) / 1000
     }
 }

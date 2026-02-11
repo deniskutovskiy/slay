@@ -1,9 +1,10 @@
+mod analytics;
 mod app;
-mod theme;
-mod palette;
-mod inspector;
 mod canvas;
-pub mod components; // NEW: Mirrored components (Views)
+pub mod components;
+mod inspector;
+mod palette;
+mod theme;
 
 use app::SlayApp;
 use egui::ViewportBuilder;

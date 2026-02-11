@@ -8,12 +8,14 @@ pub trait Component: Any {
     fn name(&self) -> &str;
     fn kind(&self) -> &str;
     
-    // Metadata for Palette (No GUI types here!)
+    // Metadata for Palette
     fn palette_color_rgb(&self) -> [u8; 3];
     fn palette_description(&self) -> &str;
     
-    // Serialization
+    // Serialization & Hot Update
     fn encode_config(&self) -> serde_json::Value;
+    // apply_config can return commands (e.g. to schedule MaintenanceComplete)
+    fn apply_config(&mut self, config: serde_json::Value, node_id: NodeId) -> Vec<ScheduleCmd>;
     
     // Metrics
     fn active_requests(&self) -> u32;
@@ -23,17 +25,15 @@ pub trait Component: Any {
     
     fn set_healthy(&mut self, healthy: bool);
     fn is_healthy(&self) -> bool;
+    
     fn add_target(&mut self, target: NodeId);
     fn remove_target(&mut self, target: NodeId);
     fn get_targets(&self) -> Vec<NodeId>;
     fn clear_targets(&mut self);
 
-        fn get_visual_snapshot(&self) -> serde_json::Value;
+    fn get_visual_snapshot(&self) -> serde_json::Value;
+    fn sync_display_stats(&mut self, current_time_us: u64);
 
-        fn sync_display_stats(&mut self);
-
-    
-
-        fn reset_internal_stats(&mut self);
+    fn reset_internal_stats(&mut self);
     fn wake_up(&self, node_id: NodeId, current_time: u64) -> Vec<ScheduleCmd>;
 }

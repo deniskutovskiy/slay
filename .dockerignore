@@ -1,0 +1,6 @@
+target/
+ui/dist/
+.git/
+.idea/
+.vscode/
+*.iml

@@ -1,5 +1,6 @@
 # Cargo
 target/
+ui/dist/
 Cargo.lock
 
 # Slay Persistence

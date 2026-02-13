@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+
+<!-- Use this to optimize for mobile: -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+
+<head>
+    <title>Slay - System Design Simulator</title>
+
+    <style>
+        html {
+            /* Remove touch delay on IE10 and Firefox. */
+            touch-action: none;
+        }
+
+        body {
+            /* Light mode background color for our application: */
+            background: #000000;
+        }
+
+        /* Allow canvas to fill entire web page: */
+        html,
+        body {
+            overflow: hidden;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Position and size the canvas: */
+        #the_canvas_id {
+            text-align: center;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            width: 100%;
+            height: 100%;
+        }
+
+        .centered {
+            margin: 0;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: sans-serif;
+            color: #ffffff;
+        }
+
+        /* ---------------------------------------------------------------------------------------------------------------- */
+        /* Spinner from https://loading.io/css/ */
+        .lds-dual-ring {
+            display: inline-block;
+            width: 80px;
+            height: 80px;
+        }
+
+        .lds-dual-ring:after {
+            content: " ";
+            display: block;
+            width: 64px;
+            height: 64px;
+            margin: 8px;
+            border-radius: 50%;
+            border: 6px solid #fff;
+            border-color: #fff transparent #fff transparent;
+            animation: lds-dual-ring 1.2s linear infinite;
+        }
+
+        @keyframes lds-dual-ring {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- The WASM code will populate this canvas -->
+    <canvas id="the_canvas_id"></canvas>
+
+    <!-- The loading spinner will be removed by the WASM code -->
+    <div id="loading_text" class="centered">
+        <div class="lds-dual-ring"></div>
+    </div>
+
+    <!-- this is the standard way to include a WASM binary with trunk -->
+    <link data-trunk rel="rust" href="Cargo.toml" />
+</body>
+
+</html>

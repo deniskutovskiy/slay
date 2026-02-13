@@ -4,8 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe.workspace = true
+eframe = { workspace = true, features = ["persistence", "glow"] }
 egui.workspace = true
 slay-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3.70"
+console_error_panic_hook = "0.1.7"
+log = "0.4"
+getrandom = { version = "0.2", features = ["js"] }

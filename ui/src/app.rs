@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use slay_core::{create_component, MetricsCollector, NodeId, Simulation};
 use std::collections::HashMap;
 
-const STATE_FILE: &str = "target/slay_state.json";
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Vec2Serde {
     pub x: f32,
@@ -40,12 +38,44 @@ pub struct SlayApp {
 }
 
 impl SlayApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app = Self::default();
-        if let Err(_) = app.load_state() {
+        if let Some(storage) = cc.storage {
+            if let Some(state) = eframe::get_value::<PersistedState>(storage, eframe::APP_KEY) {
+                app.apply_state(state);
+            } else {
+                app.setup_default_topology();
+            }
+        } else {
             app.setup_default_topology();
         }
         app
+    }
+
+    pub fn apply_state(&mut self, state: PersistedState) {
+        self.node_states = state.visuals;
+        // Reset sync timestamps — persisted values are from a previous session
+        // and would block sync until real time catches up (potentially hours).
+        for state in self.node_states.values_mut() {
+            state.last_sync_time = 0.0;
+        }
+        self.next_node_id = state.next_id;
+        for (id, kind, config_json, targets) in state.nodes {
+            if let Some(mut comp) = create_component(&kind, config_json) {
+                for t in targets {
+                    comp.add_target(t);
+                }
+                let cmds = comp.wake_up(id, self.simulation.time);
+                for cmd in cmds {
+                    self.simulation.schedule(
+                        self.simulation.time + cmd.delay,
+                        cmd.node_id,
+                        cmd.event_type,
+                    );
+                }
+                self.simulation.add_component(id, comp);
+            }
+        }
     }
 
     pub fn setup_default_topology(&mut self) {
@@ -65,30 +95,6 @@ impl SlayApp {
         self.selected_node = None;
     }
 
-    pub fn load_state(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let data = std::fs::read_to_string(STATE_FILE)?;
-        let state: PersistedState = serde_json::from_str(&data)?;
-        self.node_states = state.visuals;
-        self.next_node_id = state.next_id;
-        for (id, kind, config_json, targets) in state.nodes {
-            if let Some(mut comp) = create_component(&kind, config_json) {
-                for t in targets {
-                    comp.add_target(t);
-                }
-                let cmds = comp.wake_up(id, self.simulation.time);
-                for cmd in cmds {
-                    self.simulation.schedule(
-                        self.simulation.time + cmd.delay,
-                        cmd.node_id,
-                        cmd.event_type,
-                    );
-                }
-                self.simulation.add_component(id, comp);
-            }
-        }
-        Ok(())
-    }
-
     pub fn reset(&mut self) {
         self.simulation = Simulation::new();
         self.node_states.clear();
@@ -100,26 +106,6 @@ impl SlayApp {
         self.pan = egui::Vec2::ZERO;
         self.zoom = 1.0;
         self.metrics.reset();
-    }
-
-    pub fn save_state(&self) {
-        let mut nodes = Vec::new();
-        for (id, comp) in &self.simulation.components {
-            nodes.push((
-                *id,
-                comp.kind().to_string(),
-                comp.encode_config(),
-                comp.get_targets(),
-            ));
-        }
-        let state = PersistedState {
-            nodes,
-            visuals: self.node_states.clone(),
-            next_id: self.next_node_id,
-        };
-        if let Ok(json) = serde_json::to_string_pretty(&state) {
-            let _ = std::fs::write(STATE_FILE, json);
-        }
     }
 
     pub fn spawn_node(&mut self, world_pos: egui::Pos2, kind: &str) {
@@ -174,13 +160,31 @@ impl Default for SlayApp {
 }
 
 #[derive(Serialize, Deserialize)]
-struct PersistedState {
+pub struct PersistedState {
     nodes: Vec<(NodeId, String, serde_json::Value, Vec<NodeId>)>,
     visuals: HashMap<NodeId, NodeVisualState>,
     next_id: NodeId,
 }
 
 impl eframe::App for SlayApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let mut nodes = Vec::new();
+        for (id, comp) in &self.simulation.components {
+            nodes.push((
+                *id,
+                comp.kind().to_string(),
+                comp.encode_config(),
+                comp.get_targets(),
+            ));
+        }
+        let state = PersistedState {
+            nodes,
+            visuals: self.node_states.clone(),
+            next_id: self.next_node_id,
+        };
+        eframe::set_value(storage, eframe::APP_KEY, &state);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_real_time = ctx.input(|i| i.time);
         let dt = (current_real_time - self.last_frame_time).max(0.0);

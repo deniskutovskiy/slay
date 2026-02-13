@@ -178,8 +178,9 @@ impl Component for LoadBalancer {
                 timeout,
             } => {
                 if let Some(server_id) = self.state_table.remove(&request_id) {
-                    let entry = self.active_loads.entry(server_id).or_insert(1);
-                    *entry = entry.saturating_sub(1);
+                    if let Some(load) = self.active_loads.get_mut(&server_id) {
+                        *load = load.saturating_sub(1);
+                    }
                 }
                 path.pop();
                 if let Some(&prev_node) = path.last() {
@@ -261,6 +262,9 @@ impl Component for LoadBalancer {
     fn remove_target(&mut self, target: NodeId) {
         self.targets.retain(|&id| id != target);
         self.active_loads.remove(&target);
+        // Clean up connection tracking entries that pointed to the removed target.
+        self.state_table
+            .retain(|_, &mut server_id| server_id != target);
     }
     fn get_targets(&self) -> Vec<NodeId> {
         self.targets.clone()

@@ -223,12 +223,7 @@ impl SlayApp {
             ui.painter()
                 .circle_filled(output_port_pos, 4.5 * self.zoom, border_color);
 
-            let port_interaction_radius = 25.0 * self.zoom;
-            let input_rect = egui::Rect::from_center_size(
-                input_port_pos,
-                egui::vec2(port_interaction_radius, port_interaction_radius),
-            );
-            if ui.rect_contains_pointer(input_rect) && ctx.input(|i| i.pointer.any_released()) {
+            if ui.rect_contains_pointer(node_rect) && ctx.input(|i| i.pointer.any_released()) {
                 if let Some(source_id) = self.linking_from {
                     if source_id != id {
                         if let Some(source_comp) = self.simulation.components.get_mut(&source_id) {
@@ -237,12 +232,16 @@ impl SlayApp {
                     }
                 }
             }
+            let port_interaction_radius = 30.0 * self.zoom;
             let output_rect = egui::Rect::from_center_size(
                 output_port_pos,
                 egui::vec2(port_interaction_radius, port_interaction_radius),
             );
             let output_resp =
                 ui.interact(output_rect, egui::Id::new(("out", id)), egui::Sense::drag());
+            if output_resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
             if output_resp.drag_started() {
                 self.linking_from = Some(id);
             }

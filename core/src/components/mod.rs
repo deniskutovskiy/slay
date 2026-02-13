@@ -1,9 +1,9 @@
-use serde_json::Value;
 use crate::traits::Component;
+use serde_json::Value;
 
-pub mod server;
 pub mod client;
 pub mod load_balancer;
+pub mod server;
 
 macro_rules! register_components {
     ($($kind:expr => $type:ty),* $(,)?) => {

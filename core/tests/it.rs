@@ -1,5 +1,5 @@
-mod common;
 mod cases;
+mod common;
 
 // This is the single entry point for all integration tests.
 // Cargo will compile this file into one binary, which is much

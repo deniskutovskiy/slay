@@ -50,10 +50,12 @@ impl TestHarness {
         }
     }
 
-    pub fn set_target(&mut self, from: NodeId, to: NodeId) {
-        if let Some(c) = self.sim.components.get_mut(&from) {
-            c.add_target(to);
-        }
+    pub fn connect(&mut self, from: NodeId, to: NodeId) {
+        self.connect_with_link(from, to, Link::default());
+    }
+
+    pub fn connect_with_link(&mut self, from: NodeId, to: NodeId, link: Link) {
+        self.sim.connect_node(from, to, link);
     }
 
     pub fn start(&mut self) {

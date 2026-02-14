@@ -95,7 +95,7 @@ impl Component for Client {
                     let rid = (event.node_id as u64) << 32 | self.request_counter;
                     self.window.push_back(event.time);
                     cmds.push(ScheduleCmd {
-                        delay: crate::NETWORK_DELAY_US,
+                        delay: 0,
                         node_id: target,
                         event_type: EventType::Arrival {
                             request_id: rid,

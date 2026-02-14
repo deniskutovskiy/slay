@@ -6,7 +6,7 @@ fn test_aws_realism() {
 
     h.add_server(2, "Server", 50, 2, 100);
     h.add_client(1, 20.0);
-    h.set_target(1, 2);
+    h.connect(1, 2);
 
     h.start();
     h.run_for(5000);
@@ -19,7 +19,7 @@ fn test_saturation_and_recovery() {
     let mut h = TestHarness::new();
     h.add_server(2, "Server", 100, 1, 5);
     let client = h.add_client(1, 50.0);
-    h.set_target(1, 2);
+    h.connect(1, 2);
 
     h.start();
     h.run_for(5000);

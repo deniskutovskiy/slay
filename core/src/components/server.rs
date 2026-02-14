@@ -162,7 +162,7 @@ impl Component for Server {
                         let mut p = path.clone();
                         p.push(event.node_id);
                         cmds.push(ScheduleCmd {
-                            delay: crate::NETWORK_DELAY_US,
+                            delay: 0,
                             node_id: hop,
                             event_type: EventType::Arrival {
                                 request_id,
@@ -174,7 +174,7 @@ impl Component for Server {
                     } else {
                         if let Some(&prev) = path.last() {
                             cmds.push(ScheduleCmd {
-                                delay: crate::NETWORK_DELAY_US,
+                                delay: 0,
                                 node_id: prev,
                                 event_type: EventType::Response {
                                     request_id,
@@ -231,7 +231,7 @@ impl Component for Server {
             } => {
                 if let Some(&prev_node) = path.last() {
                     vec![ScheduleCmd {
-                        delay: crate::NETWORK_DELAY_US,
+                        delay: 0,
                         node_id: prev_node,
                         event_type: EventType::Response {
                             request_id,

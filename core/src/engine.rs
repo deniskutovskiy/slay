@@ -1,4 +1,6 @@
+use crate::network::{canonical_key, Link};
 use crate::traits::{Component, NodeId};
+use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -72,6 +74,8 @@ pub struct Simulation {
     pub success_count: u64,
     pub failure_count: u64,
     pub latencies: Vec<(u64, u64)>,
+    pub links: HashMap<(NodeId, NodeId), Link>,
+    pub rng: StdRng,
 }
 
 impl Simulation {
@@ -83,6 +87,8 @@ impl Simulation {
             success_count: 0,
             failure_count: 0,
             latencies: Vec::new(),
+            links: HashMap::new(),
+            rng: StdRng::from_entropy(),
         }
     }
 
@@ -94,6 +100,16 @@ impl Simulation {
         self.components.remove(&id);
         for comp in self.components.values_mut() {
             comp.remove_target(id);
+        }
+        self.links.retain(|(min, max), _| *min != id && *max != id);
+    }
+
+    pub fn connect_node(&mut self, from: NodeId, to: NodeId, link: Link) {
+        let key = canonical_key(from, to);
+        self.links.insert(key, link);
+
+        if let Some(comp) = self.components.get_mut(&from) {
+            comp.add_target(to);
         }
     }
 
@@ -143,7 +159,45 @@ impl Simulation {
             if let Some(comp) = self.components.get_mut(&node_id) {
                 let cmds = comp.on_event(event, &StaticInspector { health_map });
                 for cmd in cmds {
-                    self.schedule(self.time + cmd.delay, cmd.node_id, cmd.event_type);
+                    let mut delay = cmd.delay;
+                    let mut should_schedule = true;
+
+                    // Apply network physics if this is a transmission between nodes
+                    if matches!(
+                        cmd.event_type,
+                        EventType::Arrival { .. } | EventType::Response { .. }
+                    ) {
+                        // If the event targets a different node, it's a network packet subject to physics.
+                        // If targets self (cmd.node_id == node_id), it's a local loopback (instant, reliable).
+                        // We strictly segregate Network (Inter-Node) vs Local (Intra-Node) events.
+                        if cmd.node_id != node_id {
+                            let key = canonical_key(node_id, cmd.node_id);
+                            // If link doesn't exist, we create a default one implicitly or just use default physics
+                            let link = self.links.entry(key).or_insert(Link::default());
+
+                            let edge = link.get_config(node_id, cmd.node_id);
+
+                            // 1. Packet Loss
+                            if edge.packet_loss_rate > 0.0
+                                && self.rng.gen::<f32>() < edge.packet_loss_rate
+                            {
+                                should_schedule = false;
+                                self.failure_count += 1; // Count as failure
+                            } else {
+                                // 2. Latency + Jitter
+                                let jitter = if edge.jitter_us > 0 {
+                                    self.rng.gen_range(0..=edge.jitter_us)
+                                } else {
+                                    0
+                                };
+                                delay += edge.latency_us + jitter;
+                            }
+                        }
+                    }
+
+                    if should_schedule {
+                        self.schedule(self.time + delay, cmd.node_id, cmd.event_type);
+                    }
                 }
             }
             return true;

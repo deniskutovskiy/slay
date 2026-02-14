@@ -86,16 +86,63 @@ impl SlayApp {
                         p2 - egui::vec2(cp_offset, 0.),
                         p2,
                     ];
+
+                    let mut stroke_color = egui::Color32::from_gray(100);
+                    let mut stroke_width = 1.5 * self.zoom;
+
+                    let edge_key = (*id, target_id);
+                    let link_key = slay_core::canonical_key(*id, target_id);
+                    let link_opt = self.simulation.links.get(&link_key);
+
+                    let edge_conf = link_opt.map(|l| l.get_config(*id, target_id));
+
+                    // 1. Loss Visualization
+                    if let Some(conf) = edge_conf {
+                        if conf.packet_loss_rate > 0.0 {
+                            // Interpolate to red based on loss rate
+                            let t = conf.packet_loss_rate.min(1.0);
+                            let r = (100.0 + (155.0 * t)) as u8;
+                            let gb = (100.0 * (1.0 - t)) as u8;
+                            stroke_color = egui::Color32::from_rgb(r, gb, gb);
+                        }
+                    }
+
+                    if self.selected_edge == Some(edge_key) {
+                        stroke_color = COLOR_ACCENT;
+                        stroke_width = 3.0 * self.zoom;
+                    }
+
+                    // Hit Detection
+                    // We only check if NOT dragging a node and mouse is clicked
+                    let mut is_hovered = false;
+                    if !ui.ctx().is_using_pointer() && ui.rect_contains_pointer(canvas_rect) {
+                        let samples = 20;
+                        let hit_threshold = 10.0 * self.zoom;
+                        for i in 0..=samples {
+                            let t = i as f32 / samples as f32;
+                            let p = self.sample_bezier(points, t);
+                            if p.distance(mouse_pos) < hit_threshold {
+                                is_hovered = true;
+                                break;
+                            }
+                        }
+
+                        if is_hovered {
+                            stroke_width = 3.0 * self.zoom; // Highlight on hover
+
+                            if ctx.input(|i| i.pointer.any_click()) {
+                                self.selected_edge = Some(edge_key);
+                                self.selected_node = None; // Deselect node
+                            }
+                        }
+                    }
+
                     ui.painter()
                         .add(egui::Shape::CubicBezier(egui::epaint::CubicBezierShape {
                             points,
                             closed: false,
                             fill: egui::Color32::TRANSPARENT,
-                            stroke: egui::Stroke::new(
-                                1.5 * self.zoom,
-                                egui::Color32::from_gray(100),
-                            )
-                            .into(),
+                            stroke: egui::Stroke::new(stroke_width, stroke_color).into(),
                         }));
                     if throughput > 0.0 && comp.is_healthy() {
                         let num_dots = (throughput / 5.0).clamp(1.0, 5.0) as i32;
@@ -135,6 +182,7 @@ impl SlayApp {
                 ui.interact(node_rect, egui::Id::new(id), egui::Sense::click_and_drag());
             if interaction.clicked() {
                 self.selected_node = Some(id);
+                self.selected_edge = None;
             }
             if interaction.dragged() {
                 pending_movements.push((id, interaction.drag_delta() / self.zoom));
@@ -267,6 +315,11 @@ impl SlayApp {
         }
         if ctx.input(|i| i.pointer.any_released()) {
             self.linking_from = None;
+        }
+
+        // Deselect logic (click on empty space)
+        if ui.ui_contains_pointer() && ctx.input(|i| i.pointer.any_click()) {
+            // Background click handling (future use)
         }
 
         if let Some(kind) = &self.drag_node_kind {

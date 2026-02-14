@@ -6,7 +6,7 @@ fn test_chained_response_path() {
     let mut h = TestHarness::new();
     h.add_client(1, 10.0);
     h.add_server(2, "S1", 100, 1, 10);
-    h.set_target(1, 2);
+    h.connect(1, 2);
 
     h.start();
     h.run_for(1000);
@@ -25,7 +25,7 @@ fn test_strict_timeout() {
     }
 
     h.add_server(2, "Slow", 200, 1, 10);
-    h.set_target(1, 2);
+    h.connect(1, 2);
 
     h.start();
     h.run_for(1000);
@@ -41,8 +41,8 @@ fn test_rps_accounting_precision() {
     h.add(2, Box::new(LoadBalancer::new("LB")));
     h.add_server(3, "S1", 10, 100, 100);
 
-    h.set_target(1, 2);
-    h.set_target(2, 3);
+    h.connect(1, 2);
+    h.connect(2, 3);
 
     h.start();
     h.run_for(1000);

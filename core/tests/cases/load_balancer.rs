@@ -12,9 +12,9 @@ fn test_load_balancer_round_robin() {
     h.add(2, Box::new(lb));
     h.add_server(3, "S1", 10, 100, 100);
     h.add_server(4, "S2", 10, 100, 100);
-    h.set_target(1, 2);
-    h.set_target(2, 3);
-    h.set_target(2, 4);
+    h.connect(1, 2);
+    h.connect(2, 3);
+    h.connect(2, 4);
     {
         let mut cfg = lb_config.write().unwrap();
         cfg.strategy = BalancingStrategy::RoundRobin;
@@ -40,9 +40,9 @@ fn test_load_balancer_least_connections() {
     h.add_server(3, "Slow", 500, 100, 100);
     h.add_server(4, "Fast", 1, 100, 100);
 
-    h.set_target(1, 2);
-    h.set_target(2, 3);
-    h.set_target(2, 4);
+    h.connect(1, 2);
+    h.connect(2, 3);
+    h.connect(2, 4);
 
     {
         let mut cfg = lb_config.write().unwrap();
@@ -68,8 +68,8 @@ fn test_load_balancer_maintenance_downtime() {
     let lb = LoadBalancer::new("LB");
     h.add(2, Box::new(lb));
     h.add_server(3, "S1", 10, 100, 100);
-    h.set_target(1, 2);
-    h.set_target(2, 3);
+    h.connect(1, 2);
+    h.connect(2, 3);
     h.start();
     h.run_for(500);
     let initial_success = h.sim.success_count;

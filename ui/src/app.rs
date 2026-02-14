@@ -4,7 +4,7 @@ use crate::palette::render_palette;
 use crate::theme::*;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
-use slay_core::{create_component, MetricsCollector, NodeId, Simulation};
+use slay_core::{create_component, Link, MetricsCollector, NodeId, Simulation};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -26,6 +26,7 @@ pub struct SlayApp {
     pub pan: egui::Vec2,
     pub zoom: f32,
     pub selected_node: Option<NodeId>,
+    pub selected_edge: Option<(NodeId, NodeId)>,
     pub linking_from: Option<NodeId>,
     pub drag_node_kind: Option<String>,
     pub is_running: bool,
@@ -76,6 +77,12 @@ impl SlayApp {
                 self.simulation.add_component(id, comp);
             }
         }
+
+        if !state.links.is_empty() {
+            for ((min, max), link) in state.links {
+                self.simulation.links.insert((min, max), link);
+            }
+        }
     }
 
     pub fn setup_default_topology(&mut self) {
@@ -101,6 +108,7 @@ impl SlayApp {
         self.next_node_id = 1;
         self.linking_from = None;
         self.selected_node = None;
+        self.selected_edge = None;
         self.is_running = false;
         self.drag_node_kind = None;
         self.pan = egui::Vec2::ZERO;
@@ -147,6 +155,7 @@ impl Default for SlayApp {
             pan: egui::Vec2::ZERO,
             zoom: 1.0,
             selected_node: None,
+            selected_edge: None,
             linking_from: None,
             drag_node_kind: None,
             is_running: false,
@@ -164,6 +173,8 @@ pub struct PersistedState {
     nodes: Vec<(NodeId, String, serde_json::Value, Vec<NodeId>)>,
     visuals: HashMap<NodeId, NodeVisualState>,
     next_id: NodeId,
+    #[serde(default)]
+    links: Vec<((NodeId, NodeId), Link)>,
 }
 
 impl eframe::App for SlayApp {
@@ -181,6 +192,13 @@ impl eframe::App for SlayApp {
             nodes,
             visuals: self.node_states.clone(),
             next_id: self.next_node_id,
+
+            links: self
+                .simulation
+                .links
+                .iter()
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }
@@ -320,6 +338,7 @@ impl eframe::App for SlayApp {
                     ui,
                     &mut self.simulation,
                     &mut self.selected_node,
+                    &mut self.selected_edge,
                     &mut self.node_states,
                 );
             });

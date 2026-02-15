@@ -23,6 +23,49 @@ impl SlayApp {
         let mouse_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
         let canvas_rect = ui.max_rect();
 
+        if self.should_fit_to_view {
+            // Only fit if we have nodes
+            if !self.node_states.is_empty() {
+                let mut min_x = f32::INFINITY;
+                let mut min_y = f32::INFINITY;
+                let mut max_x = f32::NEG_INFINITY;
+                let mut max_y = f32::NEG_INFINITY;
+
+                for state in self.node_states.values() {
+                    min_x = min_x.min(state.pos.x);
+                    min_y = min_y.min(state.pos.y);
+                    // Node size is approx 180x90
+                    max_x = max_x.max(state.pos.x + 180.0);
+                    max_y = max_y.max(state.pos.y + 90.0);
+                }
+
+                let content_w = max_x - min_x;
+                let content_h = max_y - min_y;
+
+                if content_w > 0.0 && content_h > 0.0 {
+                    let padding = 50.0;
+                    let avail_w = (canvas_rect.width() - padding * 2.0).max(100.0);
+                    let avail_h = (canvas_rect.height() - padding * 2.0).max(100.0);
+
+                    let scale_x = avail_w / content_w;
+                    let scale_y = avail_h / content_h;
+
+                    // Clamp auto-zoom to reasonable levels to avoid extreme close-ups or tiny views
+                    self.zoom = scale_x.min(scale_y).clamp(0.5, 2.0);
+
+                    // Center the content
+                    let content_center_x = min_x + content_w / 2.0;
+                    let content_center_y = min_y + content_h / 2.0;
+
+                    let screen_center = canvas_rect.center();
+
+                    self.pan.x = screen_center.x - content_center_x * self.zoom;
+                    self.pan.y = screen_center.y - content_center_y * self.zoom;
+                }
+            }
+            self.should_fit_to_view = false;
+        }
+
         if ui.ui_contains_pointer()
             && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))
         {
@@ -129,6 +172,7 @@ impl SlayApp {
 
                         if is_hovered {
                             stroke_width = 3.0 * self.zoom; // Highlight on hover
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
 
                             if ctx.input(|i| i.pointer.any_click()) {
                                 self.selected_edge = Some(edge_key);
@@ -184,6 +228,9 @@ impl SlayApp {
                 self.selected_node = Some(id);
                 self.selected_edge = None;
             }
+            if interaction.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
             if interaction.dragged() {
                 pending_movements.push((id, interaction.drag_delta() / self.zoom));
             }
@@ -202,6 +249,8 @@ impl SlayApp {
                 COLOR_WARN
             } else if self.linking_from == Some(id) {
                 COLOR_ACCENT
+            } else if interaction.hovered() {
+                base_color
             } else {
                 base_color.gamma_multiply(0.5)
             };

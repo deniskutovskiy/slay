@@ -29,6 +29,7 @@ pub struct SlayApp {
     pub selected_edge: Option<(NodeId, NodeId)>,
     pub linking_from: Option<NodeId>,
     pub drag_node_kind: Option<String>,
+    pub should_fit_to_view: bool,
     pub is_running: bool,
     pub sim_speed: f32,
     pub stats_window_seconds: f32,
@@ -111,7 +112,8 @@ impl SlayApp {
         self.selected_edge = None;
         self.is_running = false;
         self.drag_node_kind = None;
-        self.pan = egui::Vec2::ZERO;
+        self.should_fit_to_view = true;
+        self.pan = egui::Vec2::ZERO; // Reset pan to zero, will be overridden by fit_to_view
         self.zoom = 1.0;
         self.metrics.reset();
     }
@@ -158,6 +160,7 @@ impl Default for SlayApp {
             selected_edge: None,
             linking_from: None,
             drag_node_kind: None,
+            should_fit_to_view: true,
             is_running: false,
             sim_speed: 1.0,
             stats_window_seconds: 10.0,

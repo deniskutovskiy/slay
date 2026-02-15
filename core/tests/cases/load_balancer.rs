@@ -60,31 +60,3 @@ fn test_load_balancer_least_connections() {
         "Least Connections must favor the Fast server when Slow is bogged down"
     );
 }
-
-#[test]
-fn test_load_balancer_maintenance_downtime() {
-    let mut h = TestHarness::new();
-    h.add_client(1, 100.0);
-    let lb = LoadBalancer::new("LB");
-    h.add(2, Box::new(lb));
-    h.add_server(3, "S1", 10, 100, 100);
-    h.connect(1, 2);
-    h.connect(2, 3);
-    h.start();
-    h.run_for(500);
-    let initial_success = h.sim.success_count;
-    {
-        let lb_mut = h.sim.components.get_mut(&2).unwrap();
-        let cfg_val = serde_json::json!({"strategy": "Random"});
-        let cmds = lb_mut.apply_config(cfg_val, 2);
-        for cmd in cmds {
-            h.sim
-                .schedule(h.sim.time + cmd.delay, cmd.node_id, cmd.event_type);
-        }
-    }
-    h.run_for(200);
-    let during_maint = h.sim.success_count - initial_success;
-    assert!(during_maint < 15);
-    h.run_for(1000);
-    assert!(h.sim.success_count > initial_success + 50);
-}

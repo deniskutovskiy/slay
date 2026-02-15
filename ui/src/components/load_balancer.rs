@@ -35,8 +35,20 @@ impl ComponentView for LoadBalancerView {
                 rect.right_top() + egui::vec2(-8.0 * zoom, 25.0 * zoom),
                 egui::Align2::RIGHT_TOP,
                 format!("{:.0} RPS", rps),
-                f_s,
+                f_s.clone(),
                 egui::Color32::from_rgb(0, 255, 150),
+            );
+        }
+
+        // 2a. Retry Active Badge
+        let active_retries = snapshot["active_retries"].as_u64().unwrap_or(0);
+        if active_retries > 0 {
+            painter.text(
+                rect.left_top() + egui::vec2(8.0 * zoom, 25.0 * zoom),
+                egui::Align2::LEFT_TOP,
+                format!("↻ {}", active_retries),
+                f_s,
+                egui::Color32::from_rgb(255, 200, 0), // Orange/Gold
             );
         }
 
@@ -129,6 +141,54 @@ impl ComponentView for LoadBalancerView {
                 });
             if changed {
                 *strategy = Value::from(current);
+            }
+        }
+
+        ui.add_space(10.0);
+        ui.label(egui::RichText::new("RESILIENCE").small().strong());
+
+        // Ensure defaults exist (auto-migration since strict compatibility is not required)
+        if let Some(obj) = config.as_object_mut() {
+            let max_retries = obj
+                .entry("max_retries")
+                .or_insert(serde_json::Value::from(2));
+            if let Some(val_ref) = max_retries.as_u64() {
+                let mut val = val_ref as u32;
+                if ui
+                    .add(egui::Slider::new(&mut val, 0..=5).text("Max Retries"))
+                    .changed()
+                {
+                    *max_retries = serde_json::Value::from(val);
+                    changed = true;
+                }
+            }
+
+            let backoff = obj
+                .entry("retry_backoff_ms")
+                .or_insert(serde_json::Value::from(50));
+            if let Some(val_ref) = backoff.as_u64() {
+                let mut val = val_ref;
+                if ui
+                    .add(egui::Slider::new(&mut val, 0..=500).text("Backoff (ms)"))
+                    .changed()
+                {
+                    *backoff = serde_json::Value::from(val);
+                    changed = true;
+                }
+            }
+
+            let budget = obj
+                .entry("retry_budget_ratio")
+                .or_insert(serde_json::Value::from(0.2));
+            if let Some(val_ref) = budget.as_f64() {
+                let mut val = val_ref;
+                if ui
+                    .add(egui::Slider::new(&mut val, 0.0..=1.0).text("Retry Budget %"))
+                    .changed()
+                {
+                    *budget = serde_json::Value::from(val);
+                    changed = true;
+                }
             }
         }
 

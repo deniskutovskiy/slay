@@ -5,11 +5,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
+/// Configuration for the Server component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
+    /// Time taken to process a request (in milliseconds)
     pub service_time: u64,
+    /// Maximum number of concurrent requests processed
     pub concurrency: u32,
+    /// Maximum number of pending requests in the queue
     pub backlog_limit: u32,
+    /// Probability of a request failing (0.0 - 1.0)
+    pub failure_probability: f32,
 }
 
 impl Default for ServerConfig {
@@ -18,19 +24,30 @@ impl Default for ServerConfig {
             service_time: 200,
             concurrency: 4,
             backlog_limit: 50,
+            failure_probability: 0.0,
         }
     }
 }
 
+/// Represents a backend server that processes requests
 pub struct Server {
+    /// Component name
     pub name: String,
+    /// Thread-safe configuration
     pub config: Arc<RwLock<ServerConfig>>,
+    /// Current number of requests being processed
     pub active_threads: u32,
+    /// Queue of pending requests (RequestID, Path, StartTime, Timeout)
     pub queue: VecDeque<(u64, Vec<NodeId>, u64, u64)>, // RID, Path, Start, Timeout
+    /// Next node to forward requests to (if any)
     pub next_hop: Option<NodeId>,
+    /// Total number of errors (failures + dropped requests)
     pub errors: u64,
+    /// Health status (Maintenance mode)
     pub healthy: bool,
+    /// Random number generator for jitter and failure simulation
     pub rng: StdRng,
+    /// Rolling window of request timestamps for RPS calculation
     pub arrival_window: VecDeque<u64>,
 }
 
@@ -42,6 +59,7 @@ impl Server {
                 service_time,
                 concurrency,
                 backlog_limit: backlog,
+                failure_probability: 0.0,
             })),
             active_threads: 0,
             queue: VecDeque::new(),
@@ -110,6 +128,27 @@ impl Component for Server {
                     }
                     return vec![];
                 }
+
+                if config.failure_probability > 0.0
+                    && self.rng.gen::<f32>() < config.failure_probability
+                {
+                    self.errors += 1;
+                    if let Some(&prev) = path.last() {
+                        return vec![ScheduleCmd {
+                            delay: 0,
+                            node_id: prev,
+                            event_type: EventType::Response {
+                                request_id,
+                                path,
+                                start_time,
+                                success: false,
+                                timeout,
+                            },
+                        }];
+                    }
+                    return vec![];
+                }
+
                 if self.active_threads < config.concurrency {
                     self.active_threads += 1;
                     let jitter = self.rng.gen_range(0.95..1.05);

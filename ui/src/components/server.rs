@@ -107,6 +107,23 @@ impl ComponentView for ServerView {
             }
         }
 
+        ui.add_space(10.0);
+        ui.label(egui::RichText::new("SIMULATION").small().strong());
+        if let Some(fail_prob) = config.get_mut("failure_probability") {
+            let mut val = fail_prob.as_f64().unwrap_or(0.0) as f32;
+            if ui
+                .add(
+                    egui::Slider::new(&mut val, 0.0..=1.0)
+                        .show_value(true)
+                        .text("Failure %"),
+                )
+                .changed()
+            {
+                *fail_prob = Value::from(val);
+                changed = true;
+            }
+        }
+
         changed
     }
 }

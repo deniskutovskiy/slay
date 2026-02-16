@@ -16,6 +16,17 @@ pub struct ServerConfig {
     pub backlog_limit: u32,
     /// Probability of a request failing (0.0 - 1.0)
     pub failure_probability: f32,
+    /// Saturation penalty factor (0.0 - disable, 1.0 - high penalty)
+    ///
+    /// Determines how much latency increases when the server is near max concurrency.
+    /// The penalty is calculated as:
+    /// `penalty = 1.0 + (load_factor^2 * saturation_penalty)`
+    ///
+    /// Example:
+    /// - `saturation_penalty = 0.5`
+    /// - `load_factor = 1.0` (100% load)
+    /// - `penalty = 1.0 + (1.0 * 0.5) = 1.5` (50% slower)
+    pub saturation_penalty: f32,
 }
 
 impl Default for ServerConfig {
@@ -25,6 +36,7 @@ impl Default for ServerConfig {
             concurrency: 4,
             backlog_limit: 50,
             failure_probability: 0.0,
+            saturation_penalty: 0.5,
         }
     }
 }
@@ -60,6 +72,7 @@ impl Server {
                 concurrency,
                 backlog_limit: backlog,
                 failure_probability: 0.0,
+                saturation_penalty: 0.5,
             })),
             active_threads: 0,
             queue: VecDeque::new(),
@@ -79,6 +92,16 @@ impl Server {
                 break;
             }
         }
+    }
+
+    fn calculate_processing_delay(
+        rng: &mut StdRng,
+        config: &ServerConfig,
+        load_factor: f32,
+    ) -> u64 {
+        let penalty = 1.0 + (load_factor * load_factor * config.saturation_penalty);
+        let jitter = rng.gen_range(0.95..1.05);
+        (config.service_time as f64 * 1000.0 * jitter * penalty as f64) as u64
     }
 }
 
@@ -147,8 +170,13 @@ impl Component for Server {
 
                 if self.active_threads < config.concurrency {
                     self.active_threads += 1;
-                    let jitter = self.rng.gen_range(0.95..1.05);
-                    let delay_us = (config.service_time as f64 * 1000.0 * jitter) as u64;
+
+                    // Calculate Saturation Penalty based on CURRENT load (including this request).
+                    // The rationale: the new request will execute in a system with N concurrent threads,
+                    // so it should experience the contention level of N threads, not N-1.
+                    let load_factor = self.active_threads as f32 / config.concurrency as f32;
+                    let delay_us =
+                        Self::calculate_processing_delay(&mut self.rng, &config, load_factor);
                     vec![ScheduleCmd {
                         delay: delay_us,
                         node_id: event.node_id,
@@ -239,8 +267,12 @@ impl Component for Server {
                 if let Some((next_rid, next_path, next_start, next_timeout)) =
                     self.queue.pop_front()
                 {
-                    let jitter = self.rng.gen_range(0.95..1.05);
-                    let delay_us = (config.service_time as f64 * 1000.0 * jitter) as u64;
+                    // For a request coming from queue, the system is implicitly at max concurrency
+                    // (since we just finished one but popped another one immediately).
+                    // However, we calculate it dynamically to be safe against config changes (e.g. if concurrency increased).
+                    let load_factor = self.active_threads as f32 / config.concurrency as f32;
+                    let delay_us =
+                        Self::calculate_processing_delay(&mut self.rng, &config, load_factor);
                     cmds.push(ScheduleCmd {
                         delay: delay_us,
                         node_id: event.node_id,
@@ -306,7 +338,19 @@ impl Component for Server {
     }
     fn get_visual_snapshot(&self) -> serde_json::Value {
         let config = self.config.read().unwrap();
-        serde_json::json!({ "rps": self.active_throughput(), "threads": self.active_threads, "concurrency": config.concurrency, "queue_len": self.queue.len() })
+        let load_factor = if config.concurrency > 0 {
+            self.active_threads as f32 / config.concurrency as f32
+        } else {
+            0.0
+        };
+        let current_penalty = 1.0 + (load_factor * load_factor * config.saturation_penalty);
+        serde_json::json!({
+            "rps": self.active_throughput(),
+            "threads": self.active_threads,
+            "concurrency": config.concurrency,
+            "queue_len": self.queue.len(),
+            "current_penalty": current_penalty
+        })
     }
     fn sync_display_stats(&mut self, current_time_us: u64) {
         self.update_rps_window(current_time_us);
@@ -351,5 +395,34 @@ impl Component for Server {
     }
     fn wake_up(&self, _node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
         vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_saturation_penalty_calculation() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let config = ServerConfig {
+            service_time: 10, // 10ms
+            concurrency: 10,
+            backlog_limit: 10,
+            failure_probability: 0.0,
+            saturation_penalty: 1.0,
+        };
+
+        // 1. Zero load: No penalty (approx 10ms)
+        let delay_0 = Server::calculate_processing_delay(&mut rng, &config, 0.0);
+        assert!(delay_0 >= 9_500 && delay_0 <= 10_500);
+
+        // 2. 50% load: Small penalty (1.0 + 0.25*1.0 = 1.25x -> approx 12.5ms)
+        let delay_50 = Server::calculate_processing_delay(&mut rng, &config, 0.5);
+        assert!(delay_50 >= 11_800 && delay_50 <= 13_200);
+
+        // 3. 100% load: Max penalty (1.0 + 1.0*1.0 = 2.0x -> approx 20ms)
+        let delay_100 = Server::calculate_processing_delay(&mut rng, &config, 1.0);
+        assert!(delay_100 >= 19_000 && delay_100 <= 21_000);
     }
 }

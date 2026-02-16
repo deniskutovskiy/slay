@@ -17,6 +17,20 @@ impl ComponentView for ServerView {
         let concurrency = snapshot["concurrency"].as_u64().unwrap_or(1) as u32;
         let queue = snapshot["queue_len"].as_u64().unwrap_or(0);
 
+        // Calculate load factor for visualization
+        let load_factor = if concurrency > 0 {
+            threads as f32 / concurrency as f32
+        } else {
+            0.0
+        };
+
+        let mut text_color = egui::Color32::WHITE;
+        if load_factor > 0.9 {
+            text_color = egui::Color32::from_rgb(255, 100, 100); // Red
+        } else if load_factor > 0.7 {
+            text_color = egui::Color32::from_rgb(255, 200, 100); // Yellow/Orange
+        }
+
         if rps > 0.0 {
             painter.text(
                 rect.right_top() + egui::vec2(-10.0 * zoom, 15.0 * zoom),
@@ -32,7 +46,7 @@ impl ComponentView for ServerView {
             egui::Align2::CENTER_CENTER,
             format!("{} / {}", threads, concurrency),
             f_m,
-            egui::Color32::WHITE,
+            text_color,
         );
         painter.text(
             rect.center() + egui::vec2(0., 20. * zoom),
@@ -120,6 +134,22 @@ impl ComponentView for ServerView {
                 .changed()
             {
                 *fail_prob = Value::from(val);
+                changed = true;
+            }
+        }
+
+        if let Some(sat_penalty) = config.get_mut("saturation_penalty") {
+            let mut val = sat_penalty.as_f64().unwrap_or(0.5) as f32;
+            if ui
+                .add(
+                    egui::Slider::new(&mut val, 0.0..=5.0)
+                        .show_value(true)
+                        .text("Saturation Penalty"),
+                )
+                .on_hover_text("Slowdown factor at max concurrency")
+                .changed()
+            {
+                *sat_penalty = Value::from(val);
                 changed = true;
             }
         }

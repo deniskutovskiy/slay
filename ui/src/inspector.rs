@@ -76,7 +76,8 @@ pub fn render_inspector(
             {
                 comp.set_healthy(!is_healthy);
                 if !is_healthy {
-                    pending_cmds.extend(comp.wake_up(id, simulation.time));
+                    let current_conf = comp.encode_config();
+                    pending_cmds.extend(comp.apply_config(current_conf, id));
                 }
             }
         }

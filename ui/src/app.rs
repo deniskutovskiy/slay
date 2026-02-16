@@ -67,7 +67,8 @@ impl SlayApp {
                 for t in targets {
                     comp.add_target(t);
                 }
-                let cmds = comp.wake_up(id, self.simulation.time);
+                let current_conf = comp.encode_config();
+                let cmds = comp.apply_config(current_conf, id);
                 for cmd in cmds {
                     self.simulation.schedule(
                         self.simulation.time + cmd.delay,
@@ -121,8 +122,9 @@ impl SlayApp {
     pub fn spawn_node(&mut self, world_pos: egui::Pos2, kind: &str) {
         let id = self.next_node_id;
         self.next_node_id += 1;
-        if let Some(comp) = create_component(kind, serde_json::Value::Null) {
-            let cmds = comp.wake_up(id, self.simulation.time);
+        if let Some(mut comp) = create_component(kind, serde_json::Value::Null) {
+            let current_conf = comp.encode_config();
+            let cmds = comp.apply_config(current_conf, id);
             for cmd in cmds {
                 self.simulation.schedule(
                     self.simulation.time + cmd.delay,

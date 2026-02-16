@@ -61,8 +61,9 @@ impl TestHarness {
     pub fn start(&mut self) {
         let ids: Vec<NodeId> = self.sim.components.keys().cloned().collect();
         for id in ids {
-            if let Some(comp) = self.sim.components.get(&id) {
-                let cmds = comp.wake_up(id, self.sim.time);
+            if let Some(comp) = self.sim.components.get_mut(&id) {
+                let current_conf = comp.encode_config();
+                let cmds = comp.apply_config(current_conf, id);
                 for cmd in cmds {
                     self.sim
                         .schedule(self.sim.time + cmd.delay, cmd.node_id, cmd.event_type);

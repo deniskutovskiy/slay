@@ -19,15 +19,7 @@ pub trait Component: Any {
 
     // Metrics
     fn active_requests(&self) -> u32;
-    fn active_threads(&self) -> u32 {
-        0
-    }
-    fn active_throughput(&self) -> f32 {
-        0.0
-    }
-    fn display_throughput(&self) -> f32 {
-        self.active_throughput()
-    }
+    fn display_throughput(&self) -> f32;
     fn error_count(&self) -> u64;
 
     fn set_healthy(&mut self, healthy: bool);
@@ -42,5 +34,4 @@ pub trait Component: Any {
     fn sync_display_stats(&mut self, current_time_us: u64);
 
     fn reset_internal_stats(&mut self);
-    fn wake_up(&self, node_id: NodeId, current_time: u64) -> Vec<ScheduleCmd>;
 }

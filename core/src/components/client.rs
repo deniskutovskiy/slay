@@ -153,7 +153,11 @@ impl Component for Client {
 
     fn sync_display_stats(&mut self, current_time_us: u64) {
         self.update_window(current_time_us);
-        self.display_throughput = self.active_throughput();
+        self.display_throughput = if self.healthy {
+            self.window.len() as f32
+        } else {
+            0.0
+        };
 
         let config = self.config.read().unwrap();
         self.display_snapshot = serde_json::json!({ "rate": config.arrival_rate });
@@ -162,13 +166,7 @@ impl Component for Client {
     fn active_requests(&self) -> u32 {
         0
     }
-    fn active_throughput(&self) -> f32 {
-        if self.healthy {
-            self.window.len() as f32
-        } else {
-            0.0
-        }
-    }
+
     fn display_throughput(&self) -> f32 {
         self.display_throughput
     }
@@ -199,19 +197,5 @@ impl Component for Client {
         self.window.clear();
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
-    }
-    fn wake_up(&self, node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
-        let config = self.config.read().unwrap();
-        if self.healthy {
-            vec![ScheduleCmd {
-                delay: 0,
-                node_id,
-                event_type: EventType::GenerateNext {
-                    generation_id: config.generation_id,
-                },
-            }]
-        } else {
-            vec![]
-        }
     }
 }

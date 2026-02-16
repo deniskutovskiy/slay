@@ -381,7 +381,7 @@ impl Component for LoadBalancer {
     }
     fn sync_display_stats(&mut self, current_time_us: u64) {
         self.update_rps_window(current_time_us);
-        self.display_throughput = self.active_throughput();
+        self.display_throughput = self.arrival_window.len() as f32;
 
         // Update cached snapshot
         let mut filtered_loads = HashMap::new();
@@ -390,7 +390,7 @@ impl Component for LoadBalancer {
         }
         let config = self.config.read().unwrap();
         self.display_snapshot = serde_json::json!({
-            "rps": self.active_throughput(),
+            "rps": self.display_throughput,
             "strategy": format!("{:?}", config.strategy),
             "targets": self.targets,
             "loads": filtered_loads,
@@ -406,9 +406,7 @@ impl Component for LoadBalancer {
     fn active_requests(&self) -> u32 {
         self.active_loads.values().sum()
     }
-    fn active_throughput(&self) -> f32 {
-        self.arrival_window.len() as f32
-    }
+
     fn display_throughput(&self) -> f32 {
         self.display_throughput
     }
@@ -449,8 +447,5 @@ impl Component for LoadBalancer {
         self.total_retries = 0;
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
-    }
-    fn wake_up(&self, _node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
-        vec![]
     }
 }

@@ -22,8 +22,8 @@ fn test_load_balancer_round_robin() {
     h.start();
     h.run_for(1000);
     assert!(h.sim.success_count > 90);
-    let s1_rps = h.sim.components.get(&3).unwrap().active_throughput();
-    let s2_rps = h.sim.components.get(&4).unwrap().active_throughput();
+    let s1_rps = h.sim.components.get(&3).unwrap().display_throughput();
+    let s2_rps = h.sim.components.get(&4).unwrap().display_throughput();
     let diff = (s1_rps - s2_rps).abs();
     assert!(diff <= 5.0);
 }
@@ -52,8 +52,8 @@ fn test_load_balancer_least_connections() {
     h.start();
     h.run_for(1000);
 
-    let s3_rps = h.sim.components.get(&3).unwrap().active_throughput();
-    let s4_rps = h.sim.components.get(&4).unwrap().active_throughput();
+    let s3_rps = h.sim.components.get(&3).unwrap().display_throughput();
+    let s4_rps = h.sim.components.get(&4).unwrap().display_throughput();
 
     assert!(
         s4_rps > s3_rps * 5.0,

@@ -347,7 +347,7 @@ impl Component for Server {
     }
     fn sync_display_stats(&mut self, current_time_us: u64) {
         self.update_rps_window(current_time_us);
-        self.display_throughput = self.active_throughput();
+        self.display_throughput = self.arrival_window.len() as f32;
 
         // Update cached snapshot
         let config = self.config.read().unwrap();
@@ -358,7 +358,7 @@ impl Component for Server {
         };
         let current_penalty = 1.0 + (load_factor * load_factor * config.saturation_penalty);
         self.display_snapshot = serde_json::json!({
-            "rps": self.active_throughput(),
+            "rps": self.display_throughput,
             "threads": self.active_threads,
             "concurrency": config.concurrency,
             "queue_len": self.queue.len(),
@@ -368,12 +368,7 @@ impl Component for Server {
     fn active_requests(&self) -> u32 {
         self.active_threads + self.queue.len() as u32
     }
-    fn active_threads(&self) -> u32 {
-        self.active_threads
-    }
-    fn active_throughput(&self) -> f32 {
-        self.arrival_window.len() as f32
-    }
+
     fn display_throughput(&self) -> f32 {
         self.display_throughput
     }
@@ -407,9 +402,6 @@ impl Component for Server {
         self.active_threads = 0;
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
-    }
-    fn wake_up(&self, _node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
-        vec![]
     }
 }
 

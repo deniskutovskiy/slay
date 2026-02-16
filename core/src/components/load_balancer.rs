@@ -175,10 +175,6 @@ impl Component for LoadBalancer {
     fn on_event(&mut self, event: Event, inspector: &dyn SystemInspector) -> Vec<ScheduleCmd> {
         self.update_rps_window(event.time);
         match event.event_type {
-            EventType::MaintenanceComplete => {
-                self.is_healthy = true;
-                return vec![];
-            }
             EventType::Arrival {
                 request_id,
                 mut path,
@@ -367,15 +363,9 @@ impl Component for LoadBalancer {
     fn encode_config(&self) -> serde_json::Value {
         serde_json::to_value(&*self.config.read().unwrap()).unwrap_or(serde_json::Value::Null)
     }
-    fn apply_config(&mut self, config: serde_json::Value, node_id: NodeId) -> Vec<ScheduleCmd> {
+    fn apply_config(&mut self, config: serde_json::Value, _node_id: NodeId) -> Vec<ScheduleCmd> {
         if let Ok(new_cfg) = serde_json::from_value(config) {
             *self.config.write().unwrap() = new_cfg;
-            self.is_healthy = false;
-            return vec![ScheduleCmd {
-                delay: 500_000,
-                node_id,
-                event_type: EventType::MaintenanceComplete,
-            }];
         }
         vec![]
     }

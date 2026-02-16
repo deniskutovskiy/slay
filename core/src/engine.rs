@@ -30,7 +30,6 @@ pub enum EventType {
     GenerateNext {
         generation_id: u64,
     },
-    MaintenanceComplete,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

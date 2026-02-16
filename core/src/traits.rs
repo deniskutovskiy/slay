@@ -14,7 +14,7 @@ pub trait Component: Any {
 
     // Serialization & Hot Update
     fn encode_config(&self) -> serde_json::Value;
-    // apply_config can return commands (e.g. to schedule MaintenanceComplete)
+    // apply_config can return commands
     fn apply_config(&mut self, config: serde_json::Value, node_id: NodeId) -> Vec<ScheduleCmd>;
 
     // Metrics

@@ -30,6 +30,8 @@ pub struct Client {
     pub window: VecDeque<u64>,
     pub request_counter: u64,
     pub healthy: bool,
+    pub display_throughput: f32,
+    pub display_snapshot: serde_json::Value,
 }
 
 impl Client {
@@ -44,6 +46,8 @@ impl Client {
             window: VecDeque::new(),
             request_counter: 0,
             healthy: true,
+            display_throughput: 0.0,
+            display_snapshot: serde_json::Value::Null,
         }
     }
     fn update_window(&mut self, current_time_us: u64) {
@@ -144,12 +148,15 @@ impl Component for Client {
     }
 
     fn get_visual_snapshot(&self) -> serde_json::Value {
-        let config = self.config.read().unwrap();
-        serde_json::json!({ "rate": config.arrival_rate })
+        self.display_snapshot.clone()
     }
 
     fn sync_display_stats(&mut self, current_time_us: u64) {
         self.update_window(current_time_us);
+        self.display_throughput = self.active_throughput();
+
+        let config = self.config.read().unwrap();
+        self.display_snapshot = serde_json::json!({ "rate": config.arrival_rate });
     }
 
     fn active_requests(&self) -> u32 {
@@ -161,6 +168,9 @@ impl Component for Client {
         } else {
             0.0
         }
+    }
+    fn display_throughput(&self) -> f32 {
+        self.display_throughput
     }
     fn error_count(&self) -> u64 {
         0
@@ -187,6 +197,8 @@ impl Component for Client {
     }
     fn reset_internal_stats(&mut self) {
         self.window.clear();
+        self.display_throughput = 0.0;
+        self.display_snapshot = serde_json::Value::Null;
     }
     fn wake_up(&self, node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
         let config = self.config.read().unwrap();

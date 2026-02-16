@@ -93,6 +93,10 @@ pub struct LoadBalancer {
     total_retries: u64,
     /// Current balance of retry tokens (max 10.0)
     retry_token_balance: f32,
+    /// Cached throughput for UI display (syncs with ui_refresh_rate)
+    pub display_throughput: f32,
+    /// Cached visual snapshot for UI display
+    pub display_snapshot: serde_json::Value,
 }
 
 impl LoadBalancer {
@@ -110,6 +114,8 @@ impl LoadBalancer {
             in_flight_retries: HashMap::new(),
             total_retries: 0,
             retry_token_balance: 10.0, // Start with full budget
+            display_throughput: 0.0,
+            display_snapshot: serde_json::Value::Null,
         }
     }
 
@@ -369,13 +375,21 @@ impl Component for LoadBalancer {
         }
         vec![]
     }
+
     fn get_visual_snapshot(&self) -> serde_json::Value {
+        self.display_snapshot.clone()
+    }
+    fn sync_display_stats(&mut self, current_time_us: u64) {
+        self.update_rps_window(current_time_us);
+        self.display_throughput = self.active_throughput();
+
+        // Update cached snapshot
         let mut filtered_loads = HashMap::new();
         for &tid in &self.targets {
             filtered_loads.insert(tid, *self.active_loads.get(&tid).unwrap_or(&0));
         }
         let config = self.config.read().unwrap();
-        serde_json::json!({
+        self.display_snapshot = serde_json::json!({
             "rps": self.active_throughput(),
             "strategy": format!("{:?}", config.strategy),
             "targets": self.targets,
@@ -387,16 +401,16 @@ impl Component for LoadBalancer {
                 "max_retries": config.max_retries,
                 "retry_backoff_ms": config.retry_backoff_ms
             }
-        })
-    }
-    fn sync_display_stats(&mut self, current_time_us: u64) {
-        self.update_rps_window(current_time_us);
+        });
     }
     fn active_requests(&self) -> u32 {
         self.active_loads.values().sum()
     }
     fn active_throughput(&self) -> f32 {
         self.arrival_window.len() as f32
+    }
+    fn display_throughput(&self) -> f32 {
+        self.display_throughput
     }
     fn error_count(&self) -> u64 {
         0
@@ -433,6 +447,8 @@ impl Component for LoadBalancer {
         self.state_table.clear();
         self.in_flight_retries.clear();
         self.total_retries = 0;
+        self.display_throughput = 0.0;
+        self.display_snapshot = serde_json::Value::Null;
     }
     fn wake_up(&self, _node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
         vec![]

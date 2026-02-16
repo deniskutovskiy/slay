@@ -25,6 +25,9 @@ pub trait Component: Any {
     fn active_throughput(&self) -> f32 {
         0.0
     }
+    fn display_throughput(&self) -> f32 {
+        self.active_throughput()
+    }
     fn error_count(&self) -> u64;
 
     fn set_healthy(&mut self, healthy: bool);

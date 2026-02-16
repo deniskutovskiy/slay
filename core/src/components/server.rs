@@ -61,6 +61,10 @@ pub struct Server {
     pub rng: StdRng,
     /// Rolling window of request timestamps for RPS calculation
     pub arrival_window: VecDeque<u64>,
+    /// Cached throughput for UI display
+    pub display_throughput: f32,
+    /// Cached visual snapshot for UI display
+    pub display_snapshot: serde_json::Value,
 }
 
 impl Server {
@@ -81,6 +85,8 @@ impl Server {
             healthy: true,
             rng: StdRng::from_entropy(),
             arrival_window: VecDeque::new(),
+            display_throughput: 0.0,
+            display_snapshot: serde_json::Value::Null,
         }
     }
     fn update_rps_window(&mut self, current_time_us: u64) {
@@ -337,6 +343,13 @@ impl Component for Server {
         vec![]
     }
     fn get_visual_snapshot(&self) -> serde_json::Value {
+        self.display_snapshot.clone()
+    }
+    fn sync_display_stats(&mut self, current_time_us: u64) {
+        self.update_rps_window(current_time_us);
+        self.display_throughput = self.active_throughput();
+
+        // Update cached snapshot
         let config = self.config.read().unwrap();
         let load_factor = if config.concurrency > 0 {
             self.active_threads as f32 / config.concurrency as f32
@@ -344,16 +357,13 @@ impl Component for Server {
             0.0
         };
         let current_penalty = 1.0 + (load_factor * load_factor * config.saturation_penalty);
-        serde_json::json!({
+        self.display_snapshot = serde_json::json!({
             "rps": self.active_throughput(),
             "threads": self.active_threads,
             "concurrency": config.concurrency,
             "queue_len": self.queue.len(),
             "current_penalty": current_penalty
-        })
-    }
-    fn sync_display_stats(&mut self, current_time_us: u64) {
-        self.update_rps_window(current_time_us);
+        });
     }
     fn active_requests(&self) -> u32 {
         self.active_threads + self.queue.len() as u32
@@ -363,6 +373,9 @@ impl Component for Server {
     }
     fn active_throughput(&self) -> f32 {
         self.arrival_window.len() as f32
+    }
+    fn display_throughput(&self) -> f32 {
+        self.display_throughput
     }
     fn error_count(&self) -> u64 {
         self.errors
@@ -392,6 +405,8 @@ impl Component for Server {
         self.arrival_window.clear();
         self.queue.clear();
         self.active_threads = 0;
+        self.display_throughput = 0.0;
+        self.display_snapshot = serde_json::Value::Null;
     }
     fn wake_up(&self, _node_id: NodeId, _current_time: u64) -> Vec<ScheduleCmd> {
         vec![]

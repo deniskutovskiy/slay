@@ -87,6 +87,13 @@ impl TestHarness {
                 break;
             }
         }
+        self.sync_stats();
+    }
+
+    pub fn sync_stats(&mut self) {
+        for comp in self.sim.components.values_mut() {
+            comp.sync_display_stats(self.sim.time);
+        }
     }
 
     pub fn sla(&self) -> f32 {

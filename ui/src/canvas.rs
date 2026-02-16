@@ -111,7 +111,7 @@ impl SlayApp {
         }
 
         for (id, comp) in &self.simulation.components {
-            let throughput = comp.active_throughput();
+            let throughput = comp.display_throughput();
             for target_id in comp.get_targets() {
                 if let (Some(source_state), Some(target_state)) =
                     (self.node_states.get(id), self.node_states.get(&target_id))

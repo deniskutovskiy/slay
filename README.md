@@ -91,8 +91,11 @@ The core simulation engine has **zero** dependencies on the UI layer. It communi
 *   [Rust](https://www.rust-lang.org/tools/install) (latest stable) - *Only if building from source*
 *   [Docker](https://www.docker.com/) - *Recommended for quick start*
 
+### ⚡️ Try Online (WASM)
+👉 **[slay.ktvsk.ru](https://slay.ktvsk.ru/)** — Run directly in your browser without installation.
+
 ### ⚡️ Quick Start (Docker)
-The fastest way to try Slay is using the pre-built Docker image:
+The quickest way to run locally is using the pre-built Docker image:
 ```bash
 docker compose up -d
 ```

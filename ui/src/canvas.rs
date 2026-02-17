@@ -21,94 +21,159 @@ impl SlayApp {
 
     pub fn render_canvas(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mouse_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
-        let canvas_rect = ui.max_rect();
+        let canvas_rect = ui.available_rect_before_wrap();
 
-        if self.should_fit_to_view {
-            // Only fit if we have nodes
+        // 1. Update Camera (Animation & Input)
+        self.update_camera(ui, ctx, canvas_rect);
+
+        // 2. Auto-Fit Logic
+        self.perform_auto_fit(canvas_rect);
+
+        // 3. Draw Grid
+        self.draw_grid(ui, canvas_rect);
+
+        // 4. Draw Edges (Links)
+        self.draw_edges(ui, ctx, canvas_rect);
+
+        // 5. Draw Nodes
+        self.draw_nodes(ui, ctx);
+
+        // 6. Draw Interactive Linking
+        self.draw_linking_interaction(ui, ctx);
+
+        // 7. Loading Overlay
+        if !self.is_initialized {
+            self.draw_loading_overlay(ui, canvas_rect);
+        }
+    }
+
+    fn update_camera(&mut self, ui: &egui::Ui, ctx: &egui::Context, _rect: egui::Rect) {
+        let lerp_speed = 10.0;
+        let dt = ctx.input(|i| i.stable_dt).min(0.1);
+        let t = 1.0 - (-lerp_speed * dt).exp();
+
+        self.zoom += (self.target_zoom - self.zoom) * t;
+        self.pan += (self.target_pan - self.pan) * t;
+
+        if (self.target_zoom - self.zoom).abs() > 0.001
+            || (self.target_pan - self.pan).length() > 0.1
+        {
+            ctx.request_repaint();
+        }
+
+        if ui.ui_contains_pointer()
+            && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))
+        {
+            let delta = ctx.input(|i| i.pointer.delta());
+            self.pan += delta;
+            self.target_pan += delta;
+        }
+
+        let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
+        if scroll != 0.0 {
+            let mouse = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
+            let old_zoom = self.target_zoom;
+            self.target_zoom *= (scroll * 0.001).exp();
+            self.target_zoom = self.target_zoom.clamp(0.1, 5.0);
+            let world_mouse = (mouse.to_vec2() - self.target_pan) / old_zoom;
+            self.target_pan = mouse.to_vec2() - world_mouse * self.target_zoom;
+            ctx.request_repaint();
+        }
+    }
+
+    fn perform_auto_fit(&mut self, rect: egui::Rect) {
+        self.frames_since_start += 1;
+        let is_stabilized = self.frames_since_start > 5;
+
+        if self.should_fit_to_view && is_stabilized && rect.width() > 10.0 && rect.height() > 10.0 {
             if !self.node_states.is_empty() {
                 let mut min_x = f32::INFINITY;
                 let mut min_y = f32::INFINITY;
                 let mut max_x = f32::NEG_INFINITY;
                 let mut max_y = f32::NEG_INFINITY;
 
-                for state in self.node_states.values() {
-                    min_x = min_x.min(state.pos.x);
-                    min_y = min_y.min(state.pos.y);
-                    // Node size is approx 180x90
-                    max_x = max_x.max(state.pos.x + 180.0);
-                    max_y = max_y.max(state.pos.y + 90.0);
+                for s in self.node_states.values() {
+                    min_x = min_x.min(s.pos.x);
+                    min_y = min_y.min(s.pos.y);
+                    max_x = max_x.max(s.pos.x + 180.0);
+                    max_y = max_y.max(s.pos.y + 90.0);
                 }
+                let w = max_x - min_x;
+                let h = max_y - min_y;
 
-                let content_w = max_x - min_x;
-                let content_h = max_y - min_y;
+                if w > 0.0 && h > 0.0 {
+                    let padding = 100.0;
+                    let avail_w = (rect.width() - padding * 2.0).max(100.0);
+                    let avail_h = (rect.height() - padding * 2.0).max(100.0);
+                    let scale = (avail_w / w).min(avail_h / h).clamp(0.5, 1.0);
 
-                if content_w > 0.0 && content_h > 0.0 {
-                    let padding = 50.0;
-                    let avail_w = (canvas_rect.width() - padding * 2.0).max(100.0);
-                    let avail_h = (canvas_rect.height() - padding * 2.0).max(100.0);
+                    self.target_zoom = scale;
+                    let content_cx = min_x + w / 2.0;
+                    let content_cy = min_y + h / 2.0;
+                    let screen_c = rect.center();
 
-                    let scale_x = avail_w / content_w;
-                    let scale_y = avail_h / content_h;
+                    self.target_pan.x = screen_c.x - content_cx * scale;
+                    self.target_pan.y = screen_c.y - content_cy * scale;
 
-                    // Clamp auto-zoom to reasonable levels to avoid extreme close-ups or tiny views
-                    self.zoom = scale_x.min(scale_y).clamp(0.5, 2.0);
-
-                    // Center the content
-                    let content_center_x = min_x + content_w / 2.0;
-                    let content_center_y = min_y + content_h / 2.0;
-
-                    let screen_center = canvas_rect.center();
-
-                    self.pan.x = screen_center.x - content_center_x * self.zoom;
-                    self.pan.y = screen_center.y - content_center_y * self.zoom;
+                    self.is_initialized = true;
+                    log::info!(
+                        "Auto-Fit: Zoom={}, Pan={:?}",
+                        self.target_zoom,
+                        self.target_pan
+                    );
                 }
             }
             self.should_fit_to_view = false;
+        } else if self.should_fit_to_view && !is_stabilized {
+            // Keep requesting repaint until stabilized
+            // Note: external repaint request is handled by loop, or we can't do it easily here without ctx
+        }
+    }
+
+    fn draw_grid(&self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let grid_sz = 50.0 * self.zoom;
+        let stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(35));
+
+        let start_x = ((rect.left() - self.pan.x) / grid_sz).floor() as i32;
+        let end_x = ((rect.right() - self.pan.x) / grid_sz).ceil() as i32;
+        for i in start_x..=end_x {
+            let x = self.pan.x + i as f32 * grid_sz;
+            if x >= rect.left() && x <= rect.right() {
+                ui.painter().line_segment(
+                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                    stroke,
+                );
+            }
         }
 
-        if ui.ui_contains_pointer()
-            && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))
-        {
-            self.pan += ctx.input(|i| i.pointer.delta());
+        let start_y = ((rect.top() - self.pan.y) / grid_sz).floor() as i32;
+        let end_y = ((rect.bottom() - self.pan.y) / grid_sz).ceil() as i32;
+        for i in start_y..=end_y {
+            let y = self.pan.y + i as f32 * grid_sz;
+            if y >= rect.top() && y <= rect.bottom() {
+                ui.painter().line_segment(
+                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+                    stroke,
+                );
+            }
         }
-        let scroll_delta = ctx.input(|i| i.smooth_scroll_delta.y);
-        if scroll_delta != 0.0 {
-            let old_zoom = self.zoom;
-            self.zoom *= (scroll_delta * 0.001).exp();
-            self.zoom = self.zoom.clamp(0.1, 5.0);
-            let world_mouse = egui::pos2(
-                (mouse_pos.x - self.pan.x) / old_zoom,
-                (mouse_pos.y - self.pan.y) / old_zoom,
-            );
-            self.pan = mouse_pos.to_vec2() - world_mouse.to_vec2() * self.zoom;
-        }
+    }
 
-        let grid_size = 50.0 * self.zoom;
-        let grid_stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(35));
-        let start_x_idx = ((-self.pan.x) / grid_size).floor() as i32;
-        let end_x_idx = ((-self.pan.x + canvas_rect.width()) / grid_size).ceil() as i32;
-        for i in start_x_idx..=end_x_idx {
-            let x = self.pan.x + i as f32 * grid_size;
-            ui.painter().line_segment(
-                [
-                    egui::pos2(canvas_rect.left() + x, canvas_rect.top()),
-                    egui::pos2(canvas_rect.left() + x, canvas_rect.bottom()),
-                ],
-                grid_stroke,
+    fn draw_loading_overlay(&self, ui: &mut egui::Ui, rect: egui::Rect) {
+        ui.painter()
+            .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(200));
+        ui.centered_and_justified(|ui| {
+            ui.add(egui::Spinner::new().size(32.0));
+            ui.label(
+                egui::RichText::new(" Loading...")
+                    .heading()
+                    .color(egui::Color32::WHITE),
             );
-        }
-        let start_y_idx = ((-self.pan.y) / grid_size).floor() as i32;
-        let end_y_idx = ((-self.pan.y + canvas_rect.height()) / grid_size).ceil() as i32;
-        for i in start_y_idx..=end_y_idx {
-            let y = self.pan.y + i as f32 * grid_size;
-            ui.painter().line_segment(
-                [
-                    egui::pos2(canvas_rect.left(), canvas_rect.top() + y),
-                    egui::pos2(canvas_rect.right(), canvas_rect.top() + y),
-                ],
-                grid_stroke,
-            );
-        }
+        });
+    }
+
+    fn draw_edges(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, rect: egui::Rect) {
+        let mouse_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
 
         for (id, comp) in &self.simulation.components {
             let throughput = comp.display_throughput();
@@ -130,53 +195,39 @@ impl SlayApp {
                         p2,
                     ];
 
-                    let mut stroke_color = egui::Color32::from_gray(100);
-                    let mut stroke_width = 1.5 * self.zoom;
-
+                    let mut color = egui::Color32::from_gray(100);
+                    let mut width = 1.5 * self.zoom;
                     let edge_key = (*id, target_id);
                     let link_key = slay_core::canonical_key(*id, target_id);
-                    let link_opt = self.simulation.links.get(&link_key);
 
-                    let edge_conf = link_opt.map(|l| l.get_config(*id, target_id));
-
-                    // 1. Loss Visualization
-                    if let Some(conf) = edge_conf {
+                    if let Some(link) = self.simulation.links.get(&link_key) {
+                        let conf = link.get_config(*id, target_id);
                         if conf.packet_loss_rate > 0.0 {
-                            // Interpolate to red based on loss rate
                             let t = conf.packet_loss_rate.min(1.0);
                             let r = (100.0 + (155.0 * t)) as u8;
                             let gb = (100.0 * (1.0 - t)) as u8;
-                            stroke_color = egui::Color32::from_rgb(r, gb, gb);
+                            color = egui::Color32::from_rgb(r, gb, gb);
                         }
                     }
 
                     if self.selected_edge == Some(edge_key) {
-                        stroke_color = COLOR_ACCENT;
-                        stroke_width = 3.0 * self.zoom;
+                        color = COLOR_ACCENT;
+                        width = 3.0 * self.zoom;
                     }
 
-                    // Hit Detection
-                    // We only check if NOT dragging a node and mouse is clicked
-                    let mut is_hovered = false;
-                    if !ui.ctx().is_using_pointer() && ui.rect_contains_pointer(canvas_rect) {
-                        let samples = 20;
+                    // Hover check
+                    if !ui.ctx().is_using_pointer() && ui.rect_contains_pointer(rect) {
                         let hit_threshold = 10.0 * self.zoom;
-                        for i in 0..=samples {
-                            let t = i as f32 / samples as f32;
-                            let p = self.sample_bezier(points, t);
-                            if p.distance(mouse_pos) < hit_threshold {
-                                is_hovered = true;
+                        for i in 0..=20 {
+                            let t = i as f32 / 20.0;
+                            if self.sample_bezier(points, t).distance(mouse_pos) < hit_threshold {
+                                width = 3.0 * self.zoom;
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                if ctx.input(|i| i.pointer.any_click()) {
+                                    self.selected_edge = Some(edge_key);
+                                    self.selected_node = None;
+                                }
                                 break;
-                            }
-                        }
-
-                        if is_hovered {
-                            stroke_width = 3.0 * self.zoom; // Highlight on hover
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-
-                            if ctx.input(|i| i.pointer.any_click()) {
-                                self.selected_edge = Some(edge_key);
-                                self.selected_node = None; // Deselect node
                             }
                         }
                     }
@@ -186,17 +237,17 @@ impl SlayApp {
                             points,
                             closed: false,
                             fill: egui::Color32::TRANSPARENT,
-                            stroke: egui::Stroke::new(stroke_width, stroke_color).into(),
+                            stroke: egui::Stroke::new(width, color).into(),
                         }));
+
+                    // Traffic dots
                     if throughput > 0.0 && comp.is_healthy() {
                         let num_dots = (throughput / 5.0).clamp(1.0, 5.0) as i32;
-                        let current_time = ctx.input(|i| i.time);
+                        let time = ctx.input(|i| i.time);
                         for i in 0..num_dots {
-                            let t =
-                                (current_time as f32 * 0.5 + (i as f32 / num_dots as f32)) % 1.0;
-                            let pos = self.sample_bezier(points, t);
+                            let t = (time as f32 * 0.5 + (i as f32 / num_dots as f32)) % 1.0;
                             ui.painter().circle_filled(
-                                pos,
+                                self.sample_bezier(points, t),
                                 3.0 * self.zoom,
                                 egui::Color32::from_rgb(0, 255, 255),
                             );
@@ -205,172 +256,15 @@ impl SlayApp {
                 }
             }
         }
+    }
 
+    fn draw_nodes(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mut node_ids: Vec<NodeId> = self.node_states.keys().cloned().collect();
         node_ids.sort();
-        let mut pending_movements = Vec::new();
+        let mut pending_move = Vec::new();
+        let mouse_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
 
-        for id in node_ids {
-            let comp = if let Some(c) = self.simulation.components.get(&id) {
-                c
-            } else {
-                continue;
-            };
-            let visual_state = self.node_states.get(&id).unwrap();
-            let screen_pos =
-                self.world_to_screen(egui::pos2(visual_state.pos.x, visual_state.pos.y));
-            let node_rect =
-                egui::Rect::from_min_size(screen_pos, egui::vec2(180.0, 90.0) * self.zoom);
-
-            let interaction =
-                ui.interact(node_rect, egui::Id::new(id), egui::Sense::click_and_drag());
-            if interaction.clicked() {
-                self.selected_node = Some(id);
-                self.selected_edge = None;
-            }
-            if interaction.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
-            if interaction.dragged() {
-                pending_movements.push((id, interaction.drag_delta() / self.zoom));
-            }
-
-            let rgb = comp.palette_color_rgb();
-            let base_color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-            let is_healthy = comp.is_healthy();
-
-            // CHAOS VISUALS: Dim and Red if dead
-            let fill_color = if is_healthy {
-                base_color.gamma_multiply(0.1)
-            } else {
-                egui::Color32::from_gray(30)
-            };
-            let mut border_color = if self.selected_node == Some(id) {
-                COLOR_WARN
-            } else if self.linking_from == Some(id) {
-                COLOR_ACCENT
-            } else if interaction.hovered() {
-                base_color
-            } else {
-                base_color.gamma_multiply(0.5)
-            };
-
-            if !is_healthy {
-                border_color = COLOR_CRITICAL;
-            }
-
-            ui.painter()
-                .rect_filled(node_rect, 6.0 * self.zoom, fill_color);
-            ui.painter().rect_stroke(
-                node_rect,
-                6.0 * self.zoom,
-                egui::Stroke::new(1.5 * self.zoom, border_color),
-            );
-
-            ui.painter().text(
-                node_rect.left_top() + egui::vec2(10., 15.) * self.zoom,
-                egui::Align2::LEFT_TOP,
-                comp.name().to_uppercase(),
-                egui::FontId::proportional(11.0 * self.zoom),
-                COLOR_TEXT_DIM,
-            );
-
-            // If dead, draw a big red X over it
-            if !is_healthy {
-                let margin = 20.0 * self.zoom;
-                ui.painter().line_segment(
-                    [
-                        node_rect.left_top() + egui::vec2(margin, margin),
-                        node_rect.right_bottom() - egui::vec2(margin, margin),
-                    ],
-                    egui::Stroke::new(2.0 * self.zoom, COLOR_CRITICAL.gamma_multiply(0.5)),
-                );
-                ui.painter().line_segment(
-                    [
-                        node_rect.right_top() + egui::vec2(-margin, margin),
-                        node_rect.left_bottom() + egui::vec2(margin, -margin),
-                    ],
-                    egui::Stroke::new(2.0 * self.zoom, COLOR_CRITICAL.gamma_multiply(0.5)),
-                );
-            }
-
-            if let Some(view) = get_view(comp.kind()) {
-                let snapshot = comp.get_visual_snapshot();
-                view.render_canvas(ui, node_rect, &snapshot, self.zoom);
-            }
-
-            let errors = comp.error_count();
-            if errors > 0 {
-                ui.painter().text(
-                    node_rect.right_bottom() - egui::vec2(10., 10.) * self.zoom,
-                    egui::Align2::RIGHT_BOTTOM,
-                    format!("! {} ERR", errors),
-                    egui::FontId::proportional(11.0 * self.zoom),
-                    COLOR_CRITICAL,
-                );
-            }
-
-            let input_port_pos = screen_pos + egui::vec2(0., 45.) * self.zoom;
-            let output_port_pos = screen_pos + egui::vec2(180., 45.) * self.zoom;
-            ui.painter().circle_filled(
-                input_port_pos,
-                4.5 * self.zoom,
-                egui::Color32::from_gray(80),
-            );
-            ui.painter()
-                .circle_filled(output_port_pos, 4.5 * self.zoom, border_color);
-
-            if ui.rect_contains_pointer(node_rect) && ctx.input(|i| i.pointer.any_released()) {
-                if let Some(source_id) = self.linking_from {
-                    if source_id != id {
-                        if let Some(source_comp) = self.simulation.components.get_mut(&source_id) {
-                            source_comp.add_target(id);
-                        }
-                    }
-                }
-            }
-            let port_interaction_radius = 30.0 * self.zoom;
-            let output_rect = egui::Rect::from_center_size(
-                output_port_pos,
-                egui::vec2(port_interaction_radius, port_interaction_radius),
-            );
-            let output_resp =
-                ui.interact(output_rect, egui::Id::new(("out", id)), egui::Sense::drag());
-            if output_resp.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
-            if output_resp.drag_started() {
-                self.linking_from = Some(id);
-            }
-        }
-
-        for (id, delta) in pending_movements {
-            let state = self.node_states.get_mut(&id).unwrap();
-            state.pos.x += delta.x;
-            state.pos.y += delta.y;
-        }
-
-        if let Some(source_id) = self.linking_from {
-            if let Some(source_state) = self.node_states.get(&source_id) {
-                let start_p = self.world_to_screen(egui::pos2(
-                    source_state.pos.x + 180.,
-                    source_state.pos.y + 45.,
-                ));
-                ui.painter().line_segment(
-                    [start_p, mouse_pos],
-                    egui::Stroke::new(1.5 * self.zoom, COLOR_ACCENT),
-                );
-            }
-        }
-        if ctx.input(|i| i.pointer.any_released()) {
-            self.linking_from = None;
-        }
-
-        // Deselect logic (click on empty space)
-        if ui.ui_contains_pointer() && ctx.input(|i| i.pointer.any_click()) {
-            // Background click handling (future use)
-        }
-
+        // Node Spawning Ghost
         if let Some(kind) = &self.drag_node_kind {
             let ghost_rect =
                 egui::Rect::from_center_size(mouse_pos, egui::vec2(180., 90.) * self.zoom);
@@ -385,11 +279,155 @@ impl SlayApp {
                 egui::Stroke::new(1.5, egui::Color32::WHITE),
             );
             if ctx.input(|i| i.pointer.any_released()) {
-                let drop_world_pos =
+                let world_pos =
                     self.screen_to_world(mouse_pos - egui::vec2(90.0, 45.0) * self.zoom);
-                let kind_to_spawn = kind.clone();
+                let k = kind.clone();
                 self.drag_node_kind = None;
-                self.spawn_node(drop_world_pos, &kind_to_spawn);
+                self.spawn_node(world_pos, &k);
+            }
+        }
+
+        for id in node_ids {
+            let comp = self.simulation.components.get(&id).unwrap(); // Safe unwrap due to keys source
+            let visual = self.node_states.get(&id).unwrap();
+            let screen_pos = self.world_to_screen(egui::pos2(visual.pos.x, visual.pos.y));
+            let rect = egui::Rect::from_min_size(screen_pos, egui::vec2(180.0, 90.0) * self.zoom);
+
+            let interact = ui.interact(rect, egui::Id::new(id), egui::Sense::click_and_drag());
+            if interact.clicked() {
+                self.selected_node = Some(id);
+                self.selected_edge = None;
+            }
+            if interact.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if interact.dragged() {
+                pending_move.push((id, interact.drag_delta() / self.zoom));
+            }
+
+            let rgb = comp.palette_color_rgb();
+            let base_col = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+            let is_healthy = comp.is_healthy();
+            let fill = if is_healthy {
+                base_col.gamma_multiply(0.1)
+            } else {
+                egui::Color32::from_gray(30)
+            };
+
+            let mut border = if self.selected_node == Some(id) {
+                COLOR_WARN
+            } else if self.linking_from == Some(id) {
+                COLOR_ACCENT
+            } else if interact.hovered() {
+                base_col
+            } else {
+                base_col.gamma_multiply(0.5)
+            };
+            if !is_healthy {
+                border = COLOR_CRITICAL;
+            }
+
+            ui.painter().rect_filled(rect, 6.0 * self.zoom, fill);
+            ui.painter().rect_stroke(
+                rect,
+                6.0 * self.zoom,
+                egui::Stroke::new(1.5 * self.zoom, border),
+            );
+
+            ui.painter().text(
+                rect.left_top() + egui::vec2(10., 15.) * self.zoom,
+                egui::Align2::LEFT_TOP,
+                comp.name().to_uppercase(),
+                egui::FontId::proportional(11.0 * self.zoom),
+                COLOR_TEXT_DIM,
+            );
+
+            if !is_healthy {
+                let m = 20.0 * self.zoom;
+                let s = egui::Stroke::new(2.0 * self.zoom, COLOR_CRITICAL.gamma_multiply(0.5));
+                ui.painter().line_segment(
+                    [
+                        rect.left_top() + egui::vec2(m, m),
+                        rect.right_bottom() - egui::vec2(m, m),
+                    ],
+                    s,
+                );
+                ui.painter().line_segment(
+                    [
+                        rect.right_top() + egui::vec2(-m, m),
+                        rect.left_bottom() + egui::vec2(m, -m),
+                    ],
+                    s,
+                );
+            }
+
+            if let Some(view) = get_view(comp.kind()) {
+                view.render_canvas(ui, rect, &comp.get_visual_snapshot(), self.zoom);
+            }
+
+            let errs = comp.error_count();
+            if errs > 0 {
+                ui.painter().text(
+                    rect.right_bottom() - egui::vec2(10., 10.) * self.zoom,
+                    egui::Align2::RIGHT_BOTTOM,
+                    format!("! {} ERR", errs),
+                    egui::FontId::proportional(11.0 * self.zoom),
+                    COLOR_CRITICAL,
+                );
+            }
+
+            // Ports
+            let out_pos = screen_pos + egui::vec2(180., 45.) * self.zoom;
+            ui.painter().circle_filled(
+                screen_pos + egui::vec2(0., 45.) * self.zoom,
+                4.5 * self.zoom,
+                egui::Color32::from_gray(80),
+            );
+            ui.painter().circle_filled(out_pos, 4.5 * self.zoom, border);
+
+            // Drag from output
+            let out_rect =
+                egui::Rect::from_center_size(out_pos, egui::vec2(30.0, 30.0) * self.zoom);
+            let out_resp = ui.interact(out_rect, egui::Id::new(("out", id)), egui::Sense::drag());
+            if out_resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if out_resp.drag_started() {
+                self.linking_from = Some(id);
+            }
+
+            // Drop on node
+            if ui.rect_contains_pointer(rect) && ctx.input(|i| i.pointer.any_released()) {
+                if let Some(src) = self.linking_from {
+                    if src != id {
+                        if let Some(c) = self.simulation.components.get_mut(&src) {
+                            c.add_target(id);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (id, d) in pending_move {
+            if let Some(s) = self.node_states.get_mut(&id) {
+                s.pos.x += d.x;
+                s.pos.y += d.y;
+            }
+        }
+    }
+
+    fn draw_linking_interaction(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if let Some(src) = self.linking_from {
+            if let Some(vis) = self.node_states.get(&src) {
+                let start = self.world_to_screen(egui::pos2(vis.pos.x + 180., vis.pos.y + 45.));
+                let end = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
+                ui.painter().line_segment(
+                    [start, end],
+                    egui::Stroke::new(1.5 * self.zoom, COLOR_ACCENT),
+                );
+            }
+            if ctx.input(|i| i.pointer.any_released()) {
+                self.linking_from = None;
             }
         }
     }

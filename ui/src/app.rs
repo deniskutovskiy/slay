@@ -24,7 +24,9 @@ pub struct SlayApp {
     pub node_states: HashMap<NodeId, NodeVisualState>,
     pub next_node_id: NodeId,
     pub pan: egui::Vec2,
+    pub target_pan: egui::Vec2,
     pub zoom: f32,
+    pub target_zoom: f32,
     pub selected_node: Option<NodeId>,
     pub selected_edge: Option<(NodeId, NodeId)>,
     pub linking_from: Option<NodeId>,
@@ -35,6 +37,8 @@ pub struct SlayApp {
     pub stats_window_seconds: f32,
     pub ui_refresh_rate: f32,
     pub last_frame_time: f64,
+    pub frames_since_start: u32,
+    pub is_initialized: bool,
 
     pub metrics: MetricsCollector,
 }
@@ -115,7 +119,10 @@ impl SlayApp {
         self.drag_node_kind = None;
         self.should_fit_to_view = true;
         self.pan = egui::Vec2::ZERO; // Reset pan to zero, will be overridden by fit_to_view
+        self.target_pan = egui::Vec2::ZERO;
         self.zoom = 1.0;
+        self.target_zoom = 1.0;
+        self.is_initialized = false;
         self.metrics.reset();
     }
 
@@ -157,7 +164,9 @@ impl Default for SlayApp {
             node_states: HashMap::new(),
             next_node_id: 1,
             pan: egui::Vec2::ZERO,
+            target_pan: egui::Vec2::ZERO,
             zoom: 1.0,
+            target_zoom: 1.0,
             selected_node: None,
             selected_edge: None,
             linking_from: None,
@@ -168,6 +177,8 @@ impl Default for SlayApp {
             stats_window_seconds: 10.0,
             ui_refresh_rate: 0.2,
             last_frame_time: 0.0,
+            frames_since_start: 0,
+            is_initialized: false,
             metrics: MetricsCollector::new(300),
         }
     }
@@ -345,6 +356,7 @@ impl eframe::App for SlayApp {
                     &mut self.selected_node,
                     &mut self.selected_edge,
                     &mut self.node_states,
+                    &mut self.should_fit_to_view,
                 );
             });
         egui::CentralPanel::default()

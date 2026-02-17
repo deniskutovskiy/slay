@@ -9,9 +9,17 @@ pub fn render_inspector(
     selected_node: &mut Option<NodeId>,
     selected_edge: &mut Option<(NodeId, NodeId)>,
     node_states: &mut std::collections::HashMap<NodeId, crate::app::NodeVisualState>,
+    should_fit_to_view: &mut bool,
 ) {
     ui.add_space(15.0);
-    ui.heading("Properties");
+    ui.horizontal(|ui| {
+        ui.heading("Properties");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("⛶ Fit").clicked() {
+                *should_fit_to_view = true;
+            }
+        });
+    });
     ui.add_space(10.0);
 
     let mut to_remove = None;

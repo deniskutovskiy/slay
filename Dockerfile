@@ -2,6 +2,7 @@
 FROM rust:1-slim-bookworm AS builder
 
 # Install build dependencies
+LABEL org.opencontainers.image.source=https://github.com/deniskutovskiy/slay
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \

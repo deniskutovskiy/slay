@@ -88,9 +88,17 @@ The core simulation engine has **zero** dependencies on the UI layer. It communi
 ## 🛠 Getting Started
 
 ### Prerequisites
-*   [Rust](https://www.rust-lang.org/tools/install) (latest stable)
+*   [Rust](https://www.rust-lang.org/tools/install) (latest stable) - *Only if building from source*
+*   [Docker](https://www.docker.com/) - *Recommended for quick start*
 
-### Running the UI
+### ⚡️ Quick Start (Docker)
+The fastest way to try Slay is using the pre-built Docker image:
+```bash
+docker compose up -d
+```
+Open [http://localhost:8080](http://localhost:8080) to start slaying.
+
+### 🛠 Building from Source
 ```bash
 # Run the simulator with the default topology
 cargo run -p slay-ui

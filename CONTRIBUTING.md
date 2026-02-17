@@ -104,9 +104,15 @@ cd ui
 trunk serve
 ```
 
-### Docker
+### Docker (Easiest Way)
 
-To build and run the optimized WASM version in a container (nginx):
+You can run the full simulator stack using the pre-built image from GitHub Container Registry:
+
+```bash
+docker compose up -d
+```
+
+To build locally (e.g. validting changes):
 ```bash
 docker compose up --build
 ```

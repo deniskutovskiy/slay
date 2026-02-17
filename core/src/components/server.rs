@@ -36,7 +36,7 @@ impl Default for ServerConfig {
             concurrency: 4,
             backlog_limit: 50,
             failure_probability: 0.0,
-            saturation_penalty: 0.5,
+            saturation_penalty: 0.0,
         }
     }
 }

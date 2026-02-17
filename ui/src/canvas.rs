@@ -20,8 +20,10 @@ impl SlayApp {
     }
 
     pub fn render_canvas(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let mouse_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or(egui::pos2(0., 0.)));
         let canvas_rect = ui.available_rect_before_wrap();
+
+        // 0. Handle Global Inputs (Delete)
+        self.handle_global_inputs(ctx);
 
         // 1. Update Camera (Animation & Input)
         self.update_camera(ui, ctx, canvas_rect);
@@ -291,6 +293,13 @@ impl SlayApp {
             let comp = self.simulation.components.get(&id).unwrap(); // Safe unwrap due to keys source
             let visual = self.node_states.get(&id).unwrap();
             let screen_pos = self.world_to_screen(egui::pos2(visual.pos.x, visual.pos.y));
+            let drop_zone_padding = 20.0 * self.zoom;
+            let drop_rect = egui::Rect::from_min_size(
+                screen_pos - egui::vec2(drop_zone_padding, drop_zone_padding),
+                egui::vec2(180.0, 90.0) * self.zoom
+                    + egui::vec2(drop_zone_padding * 2.0, drop_zone_padding * 2.0),
+            );
+
             let rect = egui::Rect::from_min_size(screen_pos, egui::vec2(180.0, 90.0) * self.zoom);
 
             let interact = ui.interact(rect, egui::Id::new(id), egui::Sense::click_and_drag());
@@ -396,8 +405,7 @@ impl SlayApp {
                 self.linking_from = Some(id);
             }
 
-            // Drop on node
-            if ui.rect_contains_pointer(rect) && ctx.input(|i| i.pointer.any_released()) {
+            if ui.rect_contains_pointer(drop_rect) && ctx.input(|i| i.pointer.any_released()) {
                 if let Some(src) = self.linking_from {
                     if src != id {
                         if let Some(c) = self.simulation.components.get_mut(&src) {
@@ -442,5 +450,23 @@ impl SlayApp {
             p[0].x * mt3 + 3.0 * p[1].x * mt2 * t + 3.0 * p[2].x * mt * t2 + p[3].x * t3,
             p[0].y * mt3 + 3.0 * p[1].y * mt2 * t + 3.0 * p[2].y * mt * t2 + p[3].y * t3,
         )
+    }
+
+    fn handle_global_inputs(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Backspace) || i.key_pressed(egui::Key::Delete)) {
+            if let Some((src, dst)) = self.selected_edge {
+                if let Some(comp) = self.simulation.components.get_mut(&src) {
+                    comp.remove_target(dst);
+                    self.simulation
+                        .links
+                        .remove(&slay_core::canonical_key(src, dst));
+                    self.selected_edge = None;
+                }
+            } else if let Some(id) = self.selected_node {
+                self.simulation.remove_node(id);
+                self.node_states.remove(&id);
+                self.selected_node = None;
+            }
+        }
     }
 }

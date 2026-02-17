@@ -23,6 +23,7 @@ pub fn render_inspector(
     ui.add_space(10.0);
 
     let mut to_remove = None;
+    let mut edge_to_remove = None;
     let mut pending_cmds = Vec::new();
 
     if let Some(id) = *selected_node {
@@ -90,7 +91,18 @@ pub fn render_inspector(
             }
         }
     } else if let Some((from, to)) = *selected_edge {
-        ui.label(egui::RichText::new(format!("Edge {} <-> {}", from, to)).strong());
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("Edge {} <-> {}", from, to)).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button(egui::RichText::new("🗑").color(COLOR_CRITICAL))
+                    .on_hover_text("Delete Edge")
+                    .clicked()
+                {
+                    edge_to_remove = Some((from, to));
+                }
+            });
+        });
         ui.separator();
 
         let link_key = slay_core::canonical_key(from, to);
@@ -197,6 +209,14 @@ pub fn render_inspector(
         simulation.remove_node(id);
         node_states.remove(&id);
         *selected_node = None;
+    }
+
+    if let Some((src, dst)) = edge_to_remove {
+        if let Some(comp) = simulation.components.get_mut(&src) {
+            comp.remove_target(dst);
+            simulation.links.remove(&slay_core::canonical_key(src, dst));
+            *selected_edge = None;
+        }
     }
 }
 

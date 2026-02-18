@@ -297,23 +297,27 @@ impl Component for Server {
             }
             EventType::Response {
                 request_id,
-                path,
+                mut path,
                 start_time,
                 success,
                 timeout,
             } => {
-                if let Some(&prev_node) = path.last() {
-                    vec![ScheduleCmd {
-                        delay: 0,
-                        node_id: prev_node,
-                        event_type: EventType::Response {
-                            request_id,
-                            path,
-                            start_time,
-                            success,
-                            timeout,
-                        },
-                    }]
+                if let Some(_prev_node) = path.pop() {
+                    if let Some(actual_prev) = path.last() {
+                        vec![ScheduleCmd {
+                            delay: 0,
+                            node_id: *actual_prev,
+                            event_type: EventType::Response {
+                                request_id,
+                                path,
+                                start_time,
+                                success,
+                                timeout,
+                            },
+                        }]
+                    } else {
+                        vec![]
+                    }
                 } else {
                     vec![]
                 }

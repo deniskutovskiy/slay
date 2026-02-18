@@ -1,36 +1,38 @@
 use crate::app::SlayApp;
+use crate::components::get_all_views;
 use crate::theme::*;
 use eframe::egui;
-use slay_core::get_palette_info;
 
 pub fn render_palette(ui: &mut egui::Ui, app: &mut SlayApp) {
     ui.add_space(15.0);
     ui.heading("Palette");
     ui.add_space(10.0);
 
-    for (kind, description, rgb) in get_palette_info() {
+    for (kind, view) in get_all_views() {
         let (rect, response) =
             ui.allocate_at_least(egui::vec2(ui.available_width(), 40.0), egui::Sense::drag());
 
-        let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
         let is_hovered = ui.rect_contains_pointer(rect);
         let bg_color = if is_hovered { COLOR_BG } else { COLOR_PANEL };
 
         ui.painter().rect_filled(rect, 4.0, bg_color);
-        ui.painter()
-            .rect_stroke(rect, 4.0, egui::Stroke::new(1.0, color.gamma_multiply(0.5)));
+        ui.painter().rect_stroke(
+            rect,
+            4.0,
+            egui::Stroke::new(1.0, view.color().gamma_multiply(0.5)),
+        );
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            &kind,
+            view.name(),
             egui::FontId::proportional(12.0),
             COLOR_TEXT,
         );
 
-        let response = response.on_hover_text(description);
+        let response = response.on_hover_text(view.description());
 
         if response.drag_started() {
-            app.drag_node_kind = Some(kind);
+            app.drag_node_kind = Some(kind.to_string());
         }
     }
 

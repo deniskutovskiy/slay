@@ -317,8 +317,11 @@ impl SlayApp {
                 pending_move.push((id, interact.drag_delta() / self.zoom));
             }
 
-            let rgb = comp.palette_color_rgb();
-            let base_col = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+            let base_col = if let Some(view) = get_view(comp.kind()) {
+                view.color()
+            } else {
+                egui::Color32::GRAY
+            };
             let is_healthy = comp.is_healthy();
             let fill = if is_healthy {
                 base_col.gamma_multiply(0.1)

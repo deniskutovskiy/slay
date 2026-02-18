@@ -47,7 +47,7 @@ pub fn render_inspector(
             // Hot Update Logic
             if let Some(view) = get_view(comp.kind()) {
                 let mut config_json = comp.encode_config();
-                let v: &dyn ComponentView = view.as_ref();
+                let v: &dyn ComponentView = view;
                 if v.render_inspector(ui, &mut config_json) {
                     pending_cmds = comp.apply_config(config_json, id);
                 }

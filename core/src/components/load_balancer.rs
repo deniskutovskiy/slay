@@ -360,12 +360,7 @@ impl Component for LoadBalancer {
     fn kind(&self) -> &str {
         "LoadBalancer"
     }
-    fn palette_color_rgb(&self) -> [u8; 3] {
-        [136, 192, 208]
-    }
-    fn palette_description(&self) -> &str {
-        "Distributes traffic to backends"
-    }
+
     fn encode_config(&self) -> serde_json::Value {
         serde_json::to_value(&*self.config.read().unwrap()).unwrap_or(serde_json::Value::Null)
     }

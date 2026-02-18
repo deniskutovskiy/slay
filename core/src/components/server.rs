@@ -331,12 +331,7 @@ impl Component for Server {
     fn kind(&self) -> &str {
         "Server"
     }
-    fn palette_color_rgb(&self) -> [u8; 3] {
-        [129, 161, 193]
-    }
-    fn palette_description(&self) -> &str {
-        "Application logic & queues"
-    }
+
     fn encode_config(&self) -> serde_json::Value {
         serde_json::to_value(&*self.config.read().unwrap()).unwrap_or(serde_json::Value::Null)
     }

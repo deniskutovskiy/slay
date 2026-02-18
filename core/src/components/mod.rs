@@ -24,16 +24,7 @@ macro_rules! register_components {
             }
         }
 
-        pub fn get_palette_info() -> Vec<(String, String, [u8; 3])> {
-            vec![
-                $(
-                    {
-                        let tmp: $type = Default::default();
-                        (tmp.kind().to_string(), tmp.palette_description().to_string(), tmp.palette_color_rgb())
-                    }
-                ),*
-            ]
-        }
+
     };
 }
 

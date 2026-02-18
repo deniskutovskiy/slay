@@ -6,6 +6,18 @@ use serde_json::Value;
 pub struct ServerView;
 
 impl ComponentView for ServerView {
+    fn name(&self) -> &'static str {
+        "Server"
+    }
+
+    fn description(&self) -> &'static str {
+        "Application logic & queues"
+    }
+
+    fn color(&self) -> egui::Color32 {
+        egui::Color32::from_rgb(129, 161, 193) // Blue
+    }
+
     fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32) {
         let painter = ui.painter();
         let f_m = egui::FontId::proportional(22.0 * zoom);

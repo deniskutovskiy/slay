@@ -123,12 +123,7 @@ impl Component for Client {
     fn kind(&self) -> &str {
         "Client"
     }
-    fn palette_color_rgb(&self) -> [u8; 3] {
-        [163, 190, 140]
-    }
-    fn palette_description(&self) -> &str {
-        "External load source (RPS)"
-    }
+
     fn encode_config(&self) -> serde_json::Value {
         serde_json::to_value(&*self.config.read().unwrap()).unwrap_or(serde_json::Value::Null)
     }

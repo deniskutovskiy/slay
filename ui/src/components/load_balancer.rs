@@ -5,6 +5,18 @@ use serde_json::Value;
 pub struct LoadBalancerView;
 
 impl ComponentView for LoadBalancerView {
+    fn name(&self) -> &'static str {
+        "LoadBalancer"
+    }
+
+    fn description(&self) -> &'static str {
+        "Distributes traffic to backends"
+    }
+
+    fn color(&self) -> egui::Color32 {
+        egui::Color32::from_rgb(136, 192, 208) // Cyan
+    }
+
     fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32) {
         let painter = ui.painter();
         let f_xl = egui::FontId::proportional(22.0 * zoom);

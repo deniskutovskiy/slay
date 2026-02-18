@@ -6,6 +6,18 @@ use serde_json::Value;
 pub struct ClientView;
 
 impl ComponentView for ClientView {
+    fn name(&self) -> &'static str {
+        "Client"
+    }
+
+    fn description(&self) -> &'static str {
+        "External load source (RPS)"
+    }
+
+    fn color(&self) -> egui::Color32 {
+        egui::Color32::from_rgb(163, 190, 140) // Green
+    }
+
     fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32) {
         let painter = ui.painter();
         let f_m = egui::FontId::proportional(22.0 * zoom);

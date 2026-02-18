@@ -8,10 +8,6 @@ pub trait Component: Any {
     fn name(&self) -> &str;
     fn kind(&self) -> &str;
 
-    // Metadata for Palette
-    fn palette_color_rgb(&self) -> [u8; 3];
-    fn palette_description(&self) -> &str;
-
     // Serialization & Hot Update
     fn encode_config(&self) -> serde_json::Value;
     // apply_config can return commands

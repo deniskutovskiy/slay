@@ -17,8 +17,12 @@ pub struct ServerHandle {
 
 impl TestHarness {
     pub fn new() -> Self {
+        Self::new_with_seed(1)
+    }
+
+    pub fn new_with_seed(seed: u64) -> Self {
         Self {
-            sim: Simulation::new(),
+            sim: Simulation::new(seed),
         }
     }
 

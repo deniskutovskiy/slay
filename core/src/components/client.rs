@@ -96,7 +96,10 @@ impl Component for Client {
 
                 if let Some(target) = self.target_id {
                     self.request_counter += 1;
-                    let rid = (event.node_id as u64) << 32 | self.request_counter;
+                    // Structure: [NodeId: 32 bits] [Random Salt: 32 bits] [Counter: 64 bits]
+                    let rid = ((event.node_id as u128) << 96)
+                        | ((self.rng.next_u32() as u128) << 64)
+                        | (self.request_counter as u128);
                     self.window.push_back(event.time);
                     cmds.push(ScheduleCmd {
                         delay: 0,
@@ -197,5 +200,9 @@ impl Component for Client {
         self.window.clear();
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
+    }
+
+    fn set_seed(&mut self, seed: u64) {
+        self.rng = StdRng::seed_from_u64(seed);
     }
 }

@@ -1,3 +1,4 @@
+pub mod determinism;
 pub mod load_balancer;
 mod load_balancer_retry;
 pub mod network_physics;

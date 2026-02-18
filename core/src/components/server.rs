@@ -50,7 +50,7 @@ pub struct Server {
     /// Current number of requests being processed
     pub active_threads: u32,
     /// Queue of pending requests (RequestID, Path, StartTime, Timeout)
-    pub queue: VecDeque<(u64, Vec<NodeId>, u64, u64)>, // RID, Path, Start, Timeout
+    pub queue: VecDeque<(u128, Vec<NodeId>, u64, u64)>, // RID, Path, Start, Timeout
     /// Next node to forward requests to (if any)
     pub next_hop: Option<NodeId>,
     /// Total number of errors (failures + dropped requests)
@@ -406,6 +406,10 @@ impl Component for Server {
         self.active_threads = 0;
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
+    }
+
+    fn set_seed(&mut self, seed: u64) {
+        self.rng = StdRng::seed_from_u64(seed);
     }
 }
 

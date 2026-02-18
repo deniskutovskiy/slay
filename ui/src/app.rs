@@ -109,7 +109,7 @@ impl SlayApp {
     }
 
     pub fn reset(&mut self) {
-        self.simulation = Simulation::new();
+        self.simulation = Simulation::new(42);
         self.node_states.clear();
         self.next_node_id = 1;
         self.linking_from = None;
@@ -160,7 +160,7 @@ impl SlayApp {
 impl Default for SlayApp {
     fn default() -> Self {
         Self {
-            simulation: Simulation::new(),
+            simulation: Simulation::new(42),
             node_states: HashMap::new(),
             next_node_id: 1,
             pan: egui::Vec2::ZERO,

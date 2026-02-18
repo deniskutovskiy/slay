@@ -86,9 +86,9 @@ pub struct LoadBalancer {
     /// Component health status
     pub is_healthy: bool,
     /// Map of RequestId to selected Target NodeId
-    pub state_table: HashMap<u64, NodeId>,
+    pub state_table: HashMap<u128, NodeId>,
     /// Tracking state for requests currently being retried
-    in_flight_retries: HashMap<u64, RetryState>,
+    in_flight_retries: HashMap<u128, RetryState>,
     /// Total number of retries performed since start
     total_retries: u64,
     /// Current balance of retry tokens (max 10.0)
@@ -447,5 +447,9 @@ impl Component for LoadBalancer {
         self.total_retries = 0;
         self.display_throughput = 0.0;
         self.display_snapshot = serde_json::Value::Null;
+    }
+
+    fn set_seed(&mut self, seed: u64) {
+        self.rng = StdRng::seed_from_u64(seed);
     }
 }

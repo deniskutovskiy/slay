@@ -123,6 +123,7 @@ docker compose up --build
 2.  **Headless-Ready**: The `core` crate **must never** depend on GUI libraries (`egui`, `winit`).
 3.  **Visual Stability**: The UI renders based on intermittent "snapshots" from the core. Ensure your `get_visual_snapshot` returns data that doesn't jitter wildly.
 4.  **Shared State**: Use `Arc<RwLock<Config>>` for parameters that can be changed at runtime by the UI.
+5.  **Determinism**: All randomness must come from the `Component`'s seeded RNG (via `set_seed`). Never use `rand::thread_rng()` or `SystemTime` for logic.
 
 ## Questions?
 Open an issue or start a discussion on GitHub!

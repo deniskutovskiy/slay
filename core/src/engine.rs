@@ -8,20 +8,20 @@ use std::collections::{BinaryHeap, HashMap};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventType {
     Arrival {
-        request_id: u64,
+        request_id: u128,
         path: Vec<NodeId>,
         start_time: u64,
         timeout: u64,
     },
     ProcessComplete {
-        request_id: u64,
+        request_id: u128,
         success: bool,
         start_time: u64,
         path: Vec<NodeId>,
         timeout: u64,
     },
     Response {
-        request_id: u64,
+        request_id: u128,
         path: Vec<NodeId>,
         start_time: u64,
         success: bool,
@@ -75,10 +75,11 @@ pub struct Simulation {
     pub latencies: Vec<(u64, u64)>,
     pub links: HashMap<(NodeId, NodeId), Link>,
     pub rng: StdRng,
+    pub seed: u64,
 }
 
 impl Simulation {
-    pub fn new() -> Self {
+    pub fn new(seed: u64) -> Self {
         Self {
             time: 0,
             components: HashMap::new(),
@@ -87,11 +88,14 @@ impl Simulation {
             failure_count: 0,
             latencies: Vec::new(),
             links: HashMap::new(),
-            rng: StdRng::from_entropy(),
+            rng: StdRng::seed_from_u64(seed),
+            seed,
         }
     }
 
-    pub fn add_component(&mut self, id: NodeId, component: Box<dyn Component>) {
+    pub fn add_component(&mut self, id: NodeId, mut component: Box<dyn Component>) {
+        let component_seed = self.rng.next_u64();
+        component.set_seed(component_seed);
         self.components.insert(id, component);
     }
 

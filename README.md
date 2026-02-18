@@ -37,6 +37,7 @@ The project provides an interactive environment where architectural decisions ar
 *   **UI:** [egui](https://github.com/emilk/egui) for a high-performance, immediate-mode interface.
 *   **Architecture:** Modular workspace-based design with strict separation between simulation logic (`core`) and visualization (`ui`).
 *   **Visual Stability:** Global "Visual Snapshot" system to ensure smooth, human-readable metrics without flickering.
+*   **Determinism:** Seeded RNG for reproducible simulation runs (debugging made easy).
 
 ---
 
@@ -75,13 +76,13 @@ The core simulation engine has **zero** dependencies on the UI layer. It communi
 ### Phase 2: Topology & Logic (In Progress)
 - [x] Connection editor with high-performance pulse animations.
 - [x] Load Balancer implementation with stateful tracking.
-- [ ] Component health manipulation (Manual node failure injection).
+- [x] Component health manipulation (Manual node failure injection).
 - [ ] Metric export (Prometheus/Grafana compatible formats).
 
 ### Phase 3: Advanced Network (Next)
-- [ ] **Edges as Entities**: Move network properties (Latency, Packet Loss) into individual connections.
+- [x] **Edges as Entities**: Move network properties (Latency, Packet Loss) into individual connections.
 - [ ] Region/AZ simulation (Network penalties for cross-zone traffic).
-- [ ] Real-time line charts for performance trends in the dashboard.
+- [x] Real-time line charts for performance trends in the dashboard.
 
 ---
 

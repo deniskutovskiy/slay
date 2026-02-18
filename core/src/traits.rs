@@ -34,4 +34,6 @@ pub trait Component: Any {
     fn sync_display_stats(&mut self, current_time_us: u64);
 
     fn reset_internal_stats(&mut self);
+
+    fn set_seed(&mut self, seed: u64);
 }

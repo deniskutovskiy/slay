@@ -47,6 +47,9 @@ impl SlayApp {
         if !self.is_initialized {
             self.draw_loading_overlay(ui, canvas_rect);
         }
+
+        // 8. GitHub Link
+        self.draw_github_link(ui, canvas_rect);
     }
 
     fn update_camera(&mut self, ui: &egui::Ui, ctx: &egui::Context, _rect: egui::Rect) {
@@ -468,5 +471,35 @@ impl SlayApp {
                 self.selected_node = None;
             }
         }
+    }
+
+    fn draw_github_link(&self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let link_text = "GitHub";
+        // Calculate text size to position correctly
+        let font_id = egui::FontId::proportional(14.0);
+        let text_size = ui.fonts(|f| {
+            f.layout_no_wrap(link_text.to_string(), font_id.clone(), egui::Color32::WHITE)
+                .size()
+        });
+
+        let margin = 20.0;
+        let pos = rect.right_top() + egui::vec2(-text_size.x - margin, margin);
+        let link_rect = egui::Rect::from_min_size(pos, text_size);
+
+        ui.allocate_new_ui(egui::UiBuilder::new().max_rect(link_rect), |ui| {
+            if ui
+                .link(
+                    egui::RichText::new(link_text)
+                        .font(font_id)
+                        .color(egui::Color32::from_gray(200)),
+                )
+                .clicked()
+            {
+                ui.ctx().open_url(egui::OpenUrl {
+                    url: "https://github.com/deniskutovskiy/slay".to_owned(),
+                    new_tab: true,
+                });
+            }
+        });
     }
 }

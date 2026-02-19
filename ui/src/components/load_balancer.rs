@@ -66,8 +66,20 @@ impl ComponentView for LoadBalancerView {
                     rect.left_top() + egui::vec2(8.0 * zoom, 25.0 * zoom),
                     egui::Align2::LEFT_TOP,
                     format!("↻ {}", active_retries),
+                    f_s.clone(),
+                    egui::Color32::from_rgb(255, 200, 0),
+                );
+            }
+
+            // 2b. Failed Count Badge
+            let failed = stats.failed_count;
+            if failed > 0 {
+                painter.text(
+                    rect.left_top() + egui::vec2(8.0 * zoom, 40.0 * zoom),
+                    egui::Align2::LEFT_TOP,
+                    format!("x {}", failed),
                     f_s,
-                    egui::Color32::from_rgb(255, 200, 0), // Orange/Gold
+                    egui::Color32::from_rgb(255, 80, 80),
                 );
             }
 

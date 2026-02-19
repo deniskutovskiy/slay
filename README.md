@@ -14,7 +14,7 @@
 - [🛠 Tech Stack](#-tech-stack)
 - [🧮 Mathematical Simulation Model](#-mathematical-simulation-model)
 - [📦 Component Library](#-component-library)
-- [🚀 Implementation Roadmap](#-implementation-roadmap)
+- [� Roadmap](ROADMAP.md)
 - [🛠 Getting Started](#-getting-started)
 - [🤝 Contributing](#-contributing)
 
@@ -34,10 +34,10 @@ The project provides an interactive environment where architectural decisions ar
 ## 🛠 Tech Stack
 
 *   **Engine:** Rust-based Discrete Event Simulation (DES) using a `BinaryHeap` priority queue.
-*   **UI:** [egui](https://github.com/emilk/egui) for a high-performance, immediate-mode interface.
+*   **UI:** [egui](https://github.com/emilk/egui) for a high-performance, immediate-mode interface, compiled to native and WASM.
 *   **Architecture:** Modular workspace-based design with strict separation between simulation logic (`core`) and visualization (`ui`).
-*   **Visual Stability:** Global "Visual Snapshot" system to ensure smooth, human-readable metrics without flickering.
-*   **Determinism:** Seeded RNG for reproducible simulation runs (debugging made easy).
+*   **Visual Stability:** Global Visual Snapshot system — components generate a `VisualState` enum (auto-generated via `register_components!` macro) for smooth, flicker-free metrics.
+*   **Determinism:** Seeded RNG for reproducible simulation runs.
 
 ---
 
@@ -58,31 +58,17 @@ The core simulation engine has **zero** dependencies on the UI layer. It communi
 
 | Component | Status | Features |
 | :--- | :--- | :--- |
-| **Client** | ✅ Active | RPS (λ) load source, Request Timeouts, Configurable load patterns. |
-| **App Server** | ✅ Active | Thread pools, Backlog Limit, Service Time Jitter. |
-| **Load Balancer** | ✅ Active | Round-robin, Random, Least-connections, Stateful tracking. |
-| **Database** | ⏳ TODO | Replication (Sync/Async), Sharding, Lock contention. |
+| **Client** | ✅ Active | RPS (λ) load source, request timeouts, jitter. |
+| **App Server** | ✅ Active | Thread pools, backlog limit, saturation penalty, service time jitter. |
+| **Load Balancer** | ✅ Active | Round-robin, Random, Least-connections; retry with token budget, per-request failure tracking. |
+| **Database** | ⏳ Planned | Replication (Sync/Async), sharding, lock contention. |
+| **Cache** | ⏳ Planned | Hit/miss simulation, TTL eviction, cache stampede. |
 
 ---
 
-## 🚀 Implementation Roadmap
+## � Roadmap
 
-### Phase 1: Foundation (Completed)
-- [x] Core Event Loop with Min-Heap for time management.
-- [x] Infinite Canvas with Panning and Zooming.
-- [x] Modular "Mirror" architecture for components.
-- [x] Automated `TestHarness` for system realism validation.
-
-### Phase 2: Topology & Logic (In Progress)
-- [x] Connection editor with high-performance pulse animations.
-- [x] Load Balancer implementation with stateful tracking.
-- [x] Component health manipulation (Manual node failure injection).
-- [ ] Metric export (Prometheus/Grafana compatible formats).
-
-### Phase 3: Advanced Network (Next)
-- [x] **Edges as Entities**: Move network properties (Latency, Packet Loss) into individual connections.
-- [ ] Region/AZ simulation (Network penalties for cross-zone traffic).
-- [x] Real-time line charts for performance trends in the dashboard.
+See [ROADMAP.md](ROADMAP.md) for the full development plan.
 
 ---
 

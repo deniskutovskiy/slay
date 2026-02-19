@@ -36,26 +36,34 @@ To add a new component (e.g., `Database`), you need to implement it in both laye
 ### 1. Implement Logic (The "Brain")
 **Location**: `core/src/components/` (e.g., `database.rs`)
 
-1.  **Define Config**: Create a struct (e.g., `DatabaseConfig`) that holds the component's parameters (latency, capacity, etc.).
-    - Must derive `Serialize`, `Deserialize`, `Clone`, `Debug`.
-    - Implement `Default`.
-2.  **Define Struct**: Create the main struct (e.g., `Database`).
-3.  **Implement `Component` Trait**:
-    - `on_event`: The core logic. Handle `Arrival`, `ProcessComplete`, etc. Return `ScheduleCmd`s to schedule future events.
-    - `name`, `kind`: Identifiers.
-    - `palette_color_rgb`: The color used in the UI for this node type.
-    - `encode_config` / `apply_config`: Bridge between the UI inspector and the internal state.
-    - `get_visual_snapshot`: Return a JSON object with metrics (RPS, queue length) for the UI to render.
-    - `sync_display_stats`: Update internal sliding windows for smooth metrics.
+1.  **Define Stats Struct**: Create a `DatabaseStats` struct with the fields you want to display on the canvas (RPS, queue length, etc.).
+    - Must derive `Debug`, `Clone`, `Serialize`, `Deserialize`.
+2.  **Define Config**: Create a `DatabaseConfig` struct for runtime-configurable parameters.
+    - Must derive `Serialize`, `Deserialize`, `Clone`, `Debug` and implement `Default`.
+3.  **Define Struct**: Create the main `Database` struct, holding `config: Arc<RwLock<DatabaseConfig>>`, metrics counters, and `display_snapshot: VisualState`.
+4.  **Implement `Component` Trait**:
+    - `on_event`: Core logic. Return `Vec<ScheduleCmd>` to schedule future events.
+    - `encode_config` / `apply_config`: Bridge to the UI inspector.
+    - `sync_display_stats`: Update sliding windows and set `self.display_snapshot = VisualState::Database(DatabaseStats { ... })`.
+    - `get_visual_snapshot`: Return `self.display_snapshot.clone()`.
+    - Other required methods: `name`, `kind`, `active_requests`, `display_throughput`, `error_count`, `set_healthy`, `is_healthy`, `add_target`, `remove_target`, `get_targets`, `clear_targets`, `reset_internal_stats`, `set_seed`.
 
 ### 2. Register Logic
 **Location**: `core/src/components/mod.rs`
 
 - Add `pub mod database;`
-- Register it in the `register_components!` macro:
+- Register in `register_components!` with **both** the component type and the stats type:
   ```rust
-  "Database" => database::Database,
+  register_components!(
+      Client    => client::Client,    client::ClientStats,
+      Server    => server::Server,    server::ServerStats,
+      LoadBalancer => load_balancer::LoadBalancer, load_balancer::LBStats,
+      Database  => database::Database, database::DatabaseStats,  // ← add this
+  );
   ```
+  The macro automatically:
+  - Generates a `create_component(kind: &str, ...)` factory function.
+  - Adds a `Database(DatabaseStats)` variant to the `VisualState` enum.
 
 ### 3. Implement View (The "Face")
 **Location**: `ui/src/components/` (e.g., `database.rs`)

@@ -7,3 +7,4 @@ edition = "2021"
 serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
+hdrhistogram = "7.5.4"

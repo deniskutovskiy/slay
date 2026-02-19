@@ -1,9 +1,10 @@
 use crate::network::{canonical_key, Link};
 use crate::traits::{Component, NodeId};
+use hdrhistogram::Histogram;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, VecDeque};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventType {
@@ -72,8 +73,10 @@ pub struct Simulation {
     pub events: BinaryHeap<Reverse<Event>>,
     pub success_count: u64,
     pub failure_count: u64,
-    pub latencies: Vec<(u64, u64)>,
+    pub latencies: VecDeque<(u64, u64)>,
+    pub histogram: Histogram<u64>,
     pub links: HashMap<(NodeId, NodeId), Link>,
+    pub health_buffer: HashMap<NodeId, bool>,
     pub rng: StdRng,
     pub seed: u64,
 }
@@ -86,8 +89,10 @@ impl Simulation {
             events: BinaryHeap::new(),
             success_count: 0,
             failure_count: 0,
-            latencies: Vec::new(),
+            latencies: VecDeque::new(),
+            histogram: Histogram::<u64>::new_with_bounds(1, 60_000_000, 3).unwrap(),
             links: HashMap::new(),
+            health_buffer: HashMap::new(),
             rng: StdRng::seed_from_u64(seed),
             seed,
         }
@@ -143,10 +148,16 @@ impl Simulation {
                         self.failure_count += 1;
                     } else if *success {
                         self.success_count += 1;
-                        self.latencies.push((self.time, total_time_us));
-                        if self.latencies.len() > 10000 {
-                            let cutoff = self.time.saturating_sub(60_000_000);
-                            self.latencies.retain(|(t, _)| *t >= cutoff);
+                        self.latencies.push_back((self.time, total_time_us));
+                        self.histogram.record(total_time_us).ok();
+
+                        let cutoff = self.time.saturating_sub(60_000_000);
+                        while let Some((t, _)) = self.latencies.front() {
+                            if *t < cutoff {
+                                self.latencies.pop_front();
+                            } else {
+                                break;
+                            }
                         }
                     } else {
                         self.failure_count += 1;
@@ -154,40 +165,37 @@ impl Simulation {
                 }
             }
 
-            let mut health_map = HashMap::new();
+            self.health_buffer.clear();
             for (id, comp) in &self.components {
-                health_map.insert(*id, comp.is_healthy());
+                self.health_buffer.insert(*id, comp.is_healthy());
             }
 
             if let Some(comp) = self.components.get_mut(&node_id) {
-                let cmds = comp.on_event(event, &StaticInspector { health_map });
+                let cmds = comp.on_event(
+                    event,
+                    &StaticInspector {
+                        health_map: &self.health_buffer,
+                    },
+                );
                 for cmd in cmds {
                     let mut delay = cmd.delay;
                     let mut should_schedule = true;
 
-                    // Apply network physics if this is a transmission between nodes
                     if matches!(
                         cmd.event_type,
                         EventType::Arrival { .. } | EventType::Response { .. }
                     ) {
-                        // If the event targets a different node, it's a network packet subject to physics.
-                        // If targets self (cmd.node_id == node_id), it's a local loopback (instant, reliable).
-                        // We strictly segregate Network (Inter-Node) vs Local (Intra-Node) events.
                         if cmd.node_id != node_id {
                             let key = canonical_key(node_id, cmd.node_id);
-                            // If link doesn't exist, we create a default one implicitly or just use default physics
                             let link = self.links.entry(key).or_insert(Link::default());
-
                             let edge = link.get_config(node_id, cmd.node_id);
 
-                            // 1. Packet Loss
                             if edge.packet_loss_rate > 0.0
                                 && self.rng.gen::<f32>() < edge.packet_loss_rate
                             {
                                 should_schedule = false;
-                                self.failure_count += 1; // Count as failure
+                                self.failure_count += 1;
                             } else {
-                                // 2. Latency + Jitter
                                 let jitter = if edge.jitter_us > 0 {
                                     self.rng.gen_range(0..=edge.jitter_us)
                                 } else {
@@ -212,28 +220,21 @@ impl Simulation {
         self.success_count = 0;
         self.failure_count = 0;
         self.latencies.clear();
+        self.histogram.reset();
     }
-    pub fn get_percentile(&self, p: f32, window_us: u64) -> Option<u64> {
-        let cutoff = self.time.saturating_sub(window_us);
-        let mut sample: Vec<u64> = self
-            .latencies
-            .iter()
-            .filter(|(t, _)| *t >= cutoff)
-            .map(|(_, l)| *l)
-            .collect();
-        if sample.is_empty() {
+
+    pub fn get_percentile(&self, p: f32, _window_us: u64) -> Option<u64> {
+        if self.histogram.len() == 0 {
             return None;
         }
-        sample.sort_unstable();
-        let idx = ((p / 100.0) * (sample.len() as f32 - 1.0)) as usize;
-        Some(sample[idx])
+        Some(self.histogram.value_at_percentile(p as f64))
     }
 }
 
-struct StaticInspector {
-    health_map: HashMap<NodeId, bool>,
+struct StaticInspector<'a> {
+    health_map: &'a HashMap<NodeId, bool>,
 }
-impl SystemInspector for StaticInspector {
+impl<'a> SystemInspector for StaticInspector<'a> {
     fn is_node_healthy(&self, id: NodeId) -> bool {
         *self.health_map.get(&id).unwrap_or(&false)
     }

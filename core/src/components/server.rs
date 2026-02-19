@@ -1,9 +1,18 @@
 use crate::engine::{Event, EventType, ScheduleCmd, SystemInspector};
-use crate::traits::{Component, NodeId};
+use crate::traits::{Component, NodeId, VisualState};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServerStats {
+    pub rps: f32,
+    pub threads: u32,
+    pub concurrency: u32,
+    pub queue_len: usize,
+    pub saturation_penalty: f32,
+}
 
 /// Configuration for the Server component
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +73,7 @@ pub struct Server {
     /// Cached throughput for UI display
     pub display_throughput: f32,
     /// Cached visual snapshot for UI display
-    pub display_snapshot: serde_json::Value,
+    pub display_snapshot: VisualState,
 }
 
 impl Server {
@@ -86,7 +95,7 @@ impl Server {
             rng: StdRng::from_entropy(),
             arrival_window: VecDeque::new(),
             display_throughput: 0.0,
-            display_snapshot: serde_json::Value::Null,
+            display_snapshot: VisualState::None,
         }
     }
     fn update_rps_window(&mut self, current_time_us: u64) {
@@ -177,9 +186,6 @@ impl Component for Server {
                 if self.active_threads < config.concurrency {
                     self.active_threads += 1;
 
-                    // Calculate Saturation Penalty based on CURRENT load (including this request).
-                    // The rationale: the new request will execute in a system with N concurrent threads,
-                    // so it should experience the contention level of N threads, not N-1.
                     let load_factor = self.active_threads as f32 / config.concurrency as f32;
                     let delay_us =
                         Self::calculate_processing_delay(&mut self.rng, &config, load_factor);
@@ -273,9 +279,6 @@ impl Component for Server {
                 if let Some((next_rid, next_path, next_start, next_timeout)) =
                     self.queue.pop_front()
                 {
-                    // For a request coming from queue, the system is implicitly at max concurrency
-                    // (since we just finished one but popped another one immediately).
-                    // However, we calculate it dynamically to be safe against config changes (e.g. if concurrency increased).
                     let load_factor = self.active_threads as f32 / config.concurrency as f32;
                     let delay_us =
                         Self::calculate_processing_delay(&mut self.rng, &config, load_factor);
@@ -341,7 +344,7 @@ impl Component for Server {
         }
         vec![]
     }
-    fn get_visual_snapshot(&self) -> serde_json::Value {
+    fn get_visual_snapshot(&self) -> VisualState {
         self.display_snapshot.clone()
     }
     fn sync_display_stats(&mut self, current_time_us: u64) {
@@ -356,12 +359,13 @@ impl Component for Server {
             0.0
         };
         let current_penalty = 1.0 + (load_factor * load_factor * config.saturation_penalty);
-        self.display_snapshot = serde_json::json!({
-            "rps": self.display_throughput,
-            "threads": self.active_threads,
-            "concurrency": config.concurrency,
-            "queue_len": self.queue.len(),
-            "current_penalty": current_penalty
+
+        self.display_snapshot = VisualState::Server(ServerStats {
+            rps: self.display_throughput,
+            threads: self.active_threads,
+            concurrency: config.concurrency,
+            queue_len: self.queue.len(),
+            saturation_penalty: current_penalty,
         });
     }
     fn active_requests(&self) -> u32 {
@@ -400,7 +404,7 @@ impl Component for Server {
         self.queue.clear();
         self.active_threads = 0;
         self.display_throughput = 0.0;
-        self.display_snapshot = serde_json::Value::Null;
+        self.display_snapshot = VisualState::None;
     }
 
     fn set_seed(&mut self, seed: u64) {

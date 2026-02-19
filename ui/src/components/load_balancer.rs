@@ -17,55 +17,62 @@ impl ComponentView for LoadBalancerView {
         egui::Color32::from_rgb(136, 192, 208) // Cyan
     }
 
-    fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32) {
+    fn render_canvas(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        snapshot: &slay_core::traits::VisualState,
+        zoom: f32,
+    ) {
         let painter = ui.painter();
         let f_xl = egui::FontId::proportional(22.0 * zoom);
         let f_s = egui::FontId::proportional(10.0 * zoom);
         let f_xs = egui::FontId::proportional(9.0 * zoom);
 
-        let center = rect.center();
+        if let slay_core::traits::VisualState::LoadBalancer(stats) = snapshot {
+            let center = rect.center();
 
-        // 1. Strategy Name
-        let strategy_name = match snapshot["strategy"].as_str().unwrap_or("RoundRobin") {
-            "RoundRobin" => "RR",
-            "Random" => "RND",
-            "LeastConnections" => "L-CONN",
-            s => s,
-        };
-        painter.text(
-            center,
-            egui::Align2::CENTER_CENTER,
-            strategy_name,
-            f_xl,
-            egui::Color32::WHITE,
-        );
-
-        // 2. RPS Badge
-        let rps = snapshot["rps"].as_f64().unwrap_or(0.0);
-        if rps > 0.0 {
+            // 1. Strategy Name
+            let strategy_name = match stats.strategy.as_str() {
+                "RoundRobin" => "RR",
+                "Random" => "RND",
+                "LeastConnections" => "L-CONN",
+                s => s,
+            };
             painter.text(
-                rect.right_top() + egui::vec2(-8.0 * zoom, 25.0 * zoom),
-                egui::Align2::RIGHT_TOP,
-                format!("{:.0} RPS", rps),
-                f_s.clone(),
-                egui::Color32::from_rgb(0, 255, 150),
+                center,
+                egui::Align2::CENTER_CENTER,
+                strategy_name,
+                f_xl,
+                egui::Color32::WHITE,
             );
-        }
 
-        // 2a. Retry Active Badge
-        let active_retries = snapshot["active_retries"].as_u64().unwrap_or(0);
-        if active_retries > 0 {
-            painter.text(
-                rect.left_top() + egui::vec2(8.0 * zoom, 25.0 * zoom),
-                egui::Align2::LEFT_TOP,
-                format!("↻ {}", active_retries),
-                f_s,
-                egui::Color32::from_rgb(255, 200, 0), // Orange/Gold
-            );
-        }
+            // 2. RPS Badge
+            let rps = stats.rps;
+            if rps > 0.0 {
+                painter.text(
+                    rect.right_top() + egui::vec2(-8.0 * zoom, 25.0 * zoom),
+                    egui::Align2::RIGHT_TOP,
+                    format!("{:.0} RPS", rps),
+                    f_s.clone(),
+                    egui::Color32::from_rgb(0, 255, 150),
+                );
+            }
 
-        // 3. Distribution Visualization (Using 'targets' as source of truth)
-        if let Some(targets) = snapshot["targets"].as_array() {
+            // 2a. Retry Active Badge
+            let active_retries = stats.active_retries;
+            if active_retries > 0 {
+                painter.text(
+                    rect.left_top() + egui::vec2(8.0 * zoom, 25.0 * zoom),
+                    egui::Align2::LEFT_TOP,
+                    format!("↻ {}", active_retries),
+                    f_s,
+                    egui::Color32::from_rgb(255, 200, 0), // Orange/Gold
+                );
+            }
+
+            // 3. Distribution Visualization (Using 'targets' as source of truth)
+            let targets = &stats.targets;
             let num_targets = targets.len();
             if num_targets > 0 {
                 let bar_width = (140.0 / num_targets as f32).min(20.0) * zoom;
@@ -74,14 +81,10 @@ impl ComponentView for LoadBalancerView {
                 let start_x = rect.center().x - total_width / 2.0;
                 let baseline_y = rect.bottom() - 18.0 * zoom;
 
-                let loads = snapshot["loads"].as_object();
+                let loads = &stats.loads;
 
-                for (i, target_id_val) in targets.iter().enumerate() {
-                    let target_id_str = target_id_val.as_u64().unwrap_or(0).to_string();
-                    let load = loads
-                        .and_then(|l| l.get(&target_id_str))
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                for (i, target_id) in targets.iter().enumerate() {
+                    let load = *loads.get(target_id).unwrap_or(&0);
 
                     let x = start_x + (i as f32 * (bar_width + spacing));
                     let bar_rect = egui::Rect::from_min_size(
@@ -100,7 +103,7 @@ impl ComponentView for LoadBalancerView {
                         painter.text(
                             egui::pos2(x + bar_width / 2.0, baseline_y - 4.0 * zoom),
                             egui::Align2::CENTER_BOTTOM,
-                            format!("#{}", target_id_str),
+                            format!("#{}", target_id),
                             f_xs.clone(),
                             egui::Color32::from_gray(150),
                         );

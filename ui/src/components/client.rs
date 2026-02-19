@@ -18,27 +18,35 @@ impl ComponentView for ClientView {
         egui::Color32::from_rgb(163, 190, 140) // Green
     }
 
-    fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32) {
+    fn render_canvas(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        snapshot: &slay_core::traits::VisualState,
+        zoom: f32,
+    ) {
         let painter = ui.painter();
         let f_m = egui::FontId::proportional(22.0 * zoom);
         let f_s = egui::FontId::proportional(9.0 * zoom);
 
-        let rate = snapshot["rate"].as_f64().unwrap_or(0.0);
+        if let slay_core::traits::VisualState::Client(stats) = snapshot {
+            let rate = stats.rate;
 
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            format!("{:.1} λ", rate),
-            f_m,
-            egui::Color32::WHITE,
-        );
-        painter.text(
-            rect.center() + egui::vec2(0., 20. * zoom),
-            egui::Align2::CENTER_CENTER,
-            "REQUESTS / S",
-            f_s,
-            egui::Color32::from_gray(180),
-        );
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("{:.1} λ", rate),
+                f_m,
+                egui::Color32::WHITE,
+            );
+            painter.text(
+                rect.center() + egui::vec2(0., 20. * zoom),
+                egui::Align2::CENTER_CENTER,
+                "REQUESTS / S",
+                f_s,
+                egui::Color32::from_gray(180),
+            );
+        }
     }
 
     fn render_inspector(&self, ui: &mut egui::Ui, config: &mut Value) -> bool {

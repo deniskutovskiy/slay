@@ -1,9 +1,22 @@
 use crate::engine::{Event, EventType, ScheduleCmd, SystemInspector};
-use crate::traits::{Component, NodeId};
+use crate::traits::{Component, NodeId, VisualState};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LBStats {
+    pub rps: f32,
+    pub strategy: String,
+    pub targets: Vec<NodeId>,
+    pub loads: HashMap<NodeId, u32>,
+    pub failed_count: u64,
+    pub total_retries: u64,
+    pub active_retries: u64,
+    pub max_retries: u32,
+    pub retry_backoff_ms: u64,
+}
 
 /// Strategy used to select the next target for a request
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -96,7 +109,9 @@ pub struct LoadBalancer {
     /// Cached throughput for UI display (syncs with ui_refresh_rate)
     pub display_throughput: f32,
     /// Cached visual snapshot for UI display
-    pub display_snapshot: serde_json::Value,
+    pub display_snapshot: VisualState,
+    /// Total failed requests (exhausted retries or no targets)
+    pub failure_count: u64,
 }
 
 impl LoadBalancer {
@@ -115,7 +130,8 @@ impl LoadBalancer {
             total_retries: 0,
             retry_token_balance: 10.0, // Start with full budget
             display_throughput: 0.0,
-            display_snapshot: serde_json::Value::Null,
+            display_snapshot: VisualState::None,
+            failure_count: 0,
         }
     }
 
@@ -187,13 +203,9 @@ impl Component for LoadBalancer {
                 start_time,
                 timeout,
             } => {
-                // Add tokens to the retry budget for every new incoming request.
-                // Since retries are sent directly to target nodes, every Arrival
-                // handled here represents a new request from an upstream client.
                 {
                     let config = self.config.read().unwrap();
                     self.retry_token_balance += config.retry_budget_ratio;
-                    // Cap the accumulated budget to prevent excessive bursts
                     if self.retry_token_balance > config.retry_budget_max_tokens {
                         self.retry_token_balance = config.retry_budget_max_tokens;
                     }
@@ -223,7 +235,6 @@ impl Component for LoadBalancer {
                     let entry = self.active_loads.entry(target_id).or_insert(0);
                     *entry += 1;
                     self.state_table.insert(request_id, target_id);
-                    // Push LB to path so we get the response back
                     path.push(event.node_id);
                     vec![ScheduleCmd {
                         delay: crate::PROCESS_OVERHEAD_US,
@@ -249,6 +260,7 @@ impl Component for LoadBalancer {
                             },
                         }]
                     } else {
+                        self.failure_count += 1;
                         vec![]
                     }
                 }
@@ -277,35 +289,26 @@ impl Component for LoadBalancer {
                                     failed_targets: Vec::new(),
                                 });
 
-                        // CHECK BUDGET
-                        // We need 1.0 token to retry.
                         let has_budget = self.retry_token_balance >= 1.0;
 
-                        // Verify if we can retry
                         if retry_state.retry_count < config.max_retries && has_budget {
                             retry_state.failed_targets.push(server_id);
 
-                            // Select new target excluding failed ones
                             if let Some(new_target) = self.select_target(
                                 config.strategy,
                                 inspector,
                                 &retry_state.failed_targets,
                             ) {
-                                // Consume budget
                                 self.retry_token_balance -= 1.0;
 
-                                // Update retry state
                                 retry_state.retry_count += 1;
                                 self.in_flight_retries.insert(request_id, retry_state);
                                 self.total_retries += 1;
 
-                                // Update load stats for new target
                                 *self.active_loads.entry(new_target).or_insert(0) += 1;
                                 self.state_table.insert(request_id, new_target);
 
-                                // Calculate delay
                                 let mut delay_us = config.retry_backoff_ms * 1000;
-                                // Add Jitter (approx 10%)
                                 let jitter = self.rng.gen_range(0..=(delay_us / 10).max(1));
                                 delay_us += jitter;
 
@@ -314,9 +317,6 @@ impl Component for LoadBalancer {
                                     node_id: new_target,
                                     event_type: EventType::Arrival {
                                         request_id,
-                                        // We reuse the path which already contains [..., Client, LoadBalancer].
-                                        // This ensures the new target sends the response back to US (the LoadBalancer),
-                                        // allowing us to track the retry result and update stats.
                                         path,
                                         start_time,
                                         timeout,
@@ -324,16 +324,14 @@ impl Component for LoadBalancer {
                                 }];
                             }
                         }
-                        // If we fall here: limits reached, no healthy targets, or no budget.
-                        // Fall through to standard response handler below to return failure to client.
-                        self.in_flight_retries.remove(&request_id); // Cleanup retry state
+                        self.in_flight_retries.remove(&request_id);
+                        self.failure_count += 1;
                     } else {
-                        // Success: cleanup retry state
                         self.in_flight_retries.remove(&request_id);
                     }
                 }
 
-                // If success or gave up retrying: return up the stack
+                // Return response up the stack
                 path.pop();
                 if let Some(&prev_node) = path.last() {
                     vec![ScheduleCmd {
@@ -371,7 +369,7 @@ impl Component for LoadBalancer {
         vec![]
     }
 
-    fn get_visual_snapshot(&self) -> serde_json::Value {
+    fn get_visual_snapshot(&self) -> VisualState {
         self.display_snapshot.clone()
     }
     fn sync_display_stats(&mut self, current_time_us: u64) {
@@ -379,23 +377,18 @@ impl Component for LoadBalancer {
         self.display_throughput = self.arrival_window.len() as f32;
 
         // Update cached snapshot
-        let mut filtered_loads = HashMap::new();
-        for &tid in &self.targets {
-            filtered_loads.insert(tid, *self.active_loads.get(&tid).unwrap_or(&0));
-        }
         let config = self.config.read().unwrap();
-        self.display_snapshot = serde_json::json!({
-            "rps": self.display_throughput,
-            "strategy": format!("{:?}", config.strategy),
-            "targets": self.targets,
-            "loads": filtered_loads,
-            "failed_count": self.error_count(),
-            "total_retries": self.total_retries,
-            "active_retries": self.in_flight_retries.len() as u64,
-            "config": {
-                "max_retries": config.max_retries,
-                "retry_backoff_ms": config.retry_backoff_ms
-            }
+
+        self.display_snapshot = VisualState::LoadBalancer(LBStats {
+            rps: self.display_throughput,
+            strategy: format!("{:?}", config.strategy),
+            targets: self.targets.clone(),
+            loads: self.active_loads.clone(),
+            failed_count: self.failure_count,
+            total_retries: self.total_retries,
+            active_retries: self.in_flight_retries.len() as u64,
+            max_retries: config.max_retries,
+            retry_backoff_ms: config.retry_backoff_ms,
         });
     }
     fn active_requests(&self) -> u32 {
@@ -406,7 +399,7 @@ impl Component for LoadBalancer {
         self.display_throughput
     }
     fn error_count(&self) -> u64 {
-        0
+        self.failure_count
     }
     fn set_healthy(&mut self, h: bool) {
         self.is_healthy = h;
@@ -441,7 +434,8 @@ impl Component for LoadBalancer {
         self.in_flight_retries.clear();
         self.total_retries = 0;
         self.display_throughput = 0.0;
-        self.display_snapshot = serde_json::Value::Null;
+        self.display_snapshot = VisualState::None;
+        self.failure_count = 0;
     }
 
     fn set_seed(&mut self, seed: u64) {

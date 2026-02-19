@@ -1,9 +1,14 @@
 use crate::engine::{Event, EventType, ScheduleCmd, SystemInspector};
-use crate::traits::{Component, NodeId};
+use crate::traits::{Component, NodeId, VisualState};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ClientStats {
+    pub rate: f32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientConfig {
@@ -31,7 +36,7 @@ pub struct Client {
     pub request_counter: u64,
     pub healthy: bool,
     pub display_throughput: f32,
-    pub display_snapshot: serde_json::Value,
+    pub display_snapshot: VisualState,
 }
 
 impl Client {
@@ -47,7 +52,7 @@ impl Client {
             request_counter: 0,
             healthy: true,
             display_throughput: 0.0,
-            display_snapshot: serde_json::Value::Null,
+            display_snapshot: VisualState::None,
         }
     }
     fn update_window(&mut self, current_time_us: u64) {
@@ -145,7 +150,7 @@ impl Component for Client {
         vec![]
     }
 
-    fn get_visual_snapshot(&self) -> serde_json::Value {
+    fn get_visual_snapshot(&self) -> VisualState {
         self.display_snapshot.clone()
     }
 
@@ -158,7 +163,9 @@ impl Component for Client {
         };
 
         let config = self.config.read().unwrap();
-        self.display_snapshot = serde_json::json!({ "rate": config.arrival_rate });
+        self.display_snapshot = VisualState::Client(ClientStats {
+            rate: config.arrival_rate,
+        });
     }
 
     fn active_requests(&self) -> u32 {
@@ -194,7 +201,7 @@ impl Component for Client {
     fn reset_internal_stats(&mut self) {
         self.window.clear();
         self.display_throughput = 0.0;
-        self.display_snapshot = serde_json::Value::Null;
+        self.display_snapshot = VisualState::None;
     }
 
     fn set_seed(&mut self, seed: u64) {

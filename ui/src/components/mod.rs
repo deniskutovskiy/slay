@@ -10,7 +10,13 @@ pub trait ComponentView {
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
     fn color(&self) -> egui::Color32;
-    fn render_canvas(&self, ui: &mut egui::Ui, rect: egui::Rect, snapshot: &Value, zoom: f32);
+    fn render_canvas(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        snapshot: &slay_core::traits::VisualState,
+        zoom: f32,
+    );
     fn render_inspector(&self, ui: &mut egui::Ui, config: &mut Value) -> bool;
 }
 

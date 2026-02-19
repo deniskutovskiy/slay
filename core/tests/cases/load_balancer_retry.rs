@@ -1,6 +1,7 @@
 use crate::common::TestHarness;
 use slay_core::components::load_balancer::BalancingStrategy;
 use slay_core::components::server::Server;
+use slay_core::traits::VisualState;
 use slay_core::LoadBalancer;
 use std::sync::Arc;
 
@@ -55,7 +56,11 @@ fn test_retry_on_failure() {
 
     // Check total retries metric on LB
     let lb_snapshot = h.sim.components.get(&2).unwrap().get_visual_snapshot();
-    let total_retries = lb_snapshot["total_retries"].as_u64().unwrap_or(0);
+    let total_retries = if let VisualState::LoadBalancer(stats) = lb_snapshot {
+        stats.total_retries
+    } else {
+        0
+    };
     println!("Total Retries: {}", total_retries);
     assert!(total_retries > 0, "LB should have performed retries");
 }
@@ -103,7 +108,11 @@ fn test_retry_exhaustion() {
     );
 
     let lb_snapshot = h.sim.components.get(&2).unwrap().get_visual_snapshot();
-    let total_retries = lb_snapshot["total_retries"].as_u64().unwrap_or(0);
+    let total_retries = if let VisualState::LoadBalancer(stats) = lb_snapshot {
+        stats.total_retries
+    } else {
+        0
+    };
     assert!(
         total_retries > 0,
         "Retries should happen even if they eventually fail"
@@ -152,7 +161,11 @@ fn test_retry_budget_exhaustion() {
     h.run_for(5000);
 
     let snapshot = h.sim.components.get(&2).unwrap().get_visual_snapshot();
-    let total_retries = snapshot["total_retries"].as_u64().unwrap_or(0);
+    let total_retries = if let VisualState::LoadBalancer(stats) = snapshot {
+        stats.total_retries
+    } else {
+        0
+    };
 
     println!("Total Retries: {}", total_retries);
 
